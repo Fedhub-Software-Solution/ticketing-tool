@@ -16,10 +16,23 @@ function toRole(row: any) {
   };
 }
 
+// Map role code to user_role enum so we count users correctly (users.role is enum, roles.code can be e.g. 'administrator', 'mm').
+const USER_COUNT_BY_ROLE = `
+  (SELECT COUNT(*)::int FROM users u
+   WHERE u.role = (
+     CASE
+       WHEN r.code IN ('admin', 'administrator') OR r.code LIKE 'admin%' THEN 'admin'::user_role
+       WHEN r.code IN ('manager', 'mm') OR r.code LIKE 'manager%' THEN 'manager'::user_role
+       WHEN r.code IN ('agent') OR r.code LIKE 'agent%' THEN 'agent'::user_role
+       WHEN r.code IN ('customer') OR r.code LIKE 'customer%' THEN 'customer'::user_role
+       ELSE NULL
+     END
+   )) AS user_count
+`;
+
 export async function listRoles(_req: AuthRequest, res: Response): Promise<void> {
   const r = await pool.query(
-    `SELECT r.*,
-      (SELECT COUNT(*)::int FROM users u WHERE u.role::text = r.code) AS user_count
+    `SELECT r.*, ${USER_COUNT_BY_ROLE}
      FROM roles r
      ORDER BY r.name`
   );
@@ -65,7 +78,7 @@ export async function updateRole(req: AuthRequest, res: Response): Promise<void>
     [name, description, permissions, id]
   );
   const withCount = await pool.query(
-    `SELECT r.*, (SELECT COUNT(*)::int FROM users u WHERE u.role::text = r.code) AS user_count FROM roles r WHERE r.id = $1`,
+    `SELECT r.*, ${USER_COUNT_BY_ROLE} FROM roles r WHERE r.id = $1`,
     [id]
   );
   res.json(toRole(withCount.rows[0]));

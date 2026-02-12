@@ -18,7 +18,7 @@ import { MyClosedTickets } from './components/workplace/MyClosedTickets';
 import { MyOverdueTickets } from './components/workplace/MyOverdueTickets';
 import { Board } from './components/menus/Board';
 import { CreateTicket } from './components/menus/CreateTicket';
-import { UserManagement } from './components/configuration/UserManagement';
+import { UserManagement } from './components/configuration/access-management/UserManagement';
 import { Login } from './components/Login';
 import { CustomerPortal } from './components/CustomerPortal';
 import { Profile } from './components/Profile';
