@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Clock, Plus, Edit, Trash2, Save, X, List, Table, Search, Filter } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Clock, Plus, Edit, Trash2, List, Table, Search, Filter } from 'lucide-react';
+import type { MRT_ColumnDef } from 'material-react-table';
 import { Card } from '../../common/ui/card';
 import { Button } from '../../common/ui/button';
 import { Input } from '../../common/ui/input';
@@ -29,11 +30,33 @@ import {
 } from '../../common/ui/tooltip';
 import { useGetSLAsQuery, useCreateSLAMutation, useUpdateSLAMutation, useDeleteSLAMutation } from '@/app/store/apis/slasApi';
 import { SLA } from '@/app/types';
+import { SLA_PRIORITIES, SLA_PRIORITY_COLORS } from '../../common/constants';
+import type { SLAPriorityValue } from '../../common/constants';
 import { toast } from 'sonner';
 import { motion } from 'motion/react';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../common/ui/alert-dialog';
+import { MaterialReactTableWrapper } from '../../common/mrt/MaterialReactTableWrapper';
+
+const DEFAULT_PRIORITY = SLA_PRIORITIES.find((p) => p.value === 'medium')!.value;
+
+function formatTime(minutes: number) {
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+}
 
 export function SLAConfig() {
-  const { data: slas = [] } = useGetSLAsQuery();
+  const { data: slas = [], isLoading: slasLoading } = useGetSLAsQuery();
+  const [slaToDelete, setSlaToDelete] = useState<SLA | null>(null);
   const [createSLA] = useCreateSLAMutation();
   const [updateSLA] = useUpdateSLAMutation();
   const [deleteSLAMutation] = useDeleteSLAMutation();
@@ -51,7 +74,7 @@ export function SLAConfig() {
 
   const [formData, setFormData] = useState({
     name: '',
-    priority: 'medium' as SLA['priority'],
+    priority: DEFAULT_PRIORITY as SLAPriorityValue,
     responseTime: 60,
     resolutionTime: 480,
   });
@@ -80,9 +103,11 @@ export function SLAConfig() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!slaToDelete) return;
     try {
-      await deleteSLAMutation(id).unwrap();
+      await deleteSLAMutation(slaToDelete.id).unwrap();
+      setSlaToDelete(null);
       toast.success('SLA configuration deleted');
     } catch {
       toast.error('Failed to delete SLA');
@@ -103,26 +128,63 @@ export function SLAConfig() {
   const resetForm = () => {
     setFormData({
       name: '',
-      priority: 'medium',
+      priority: DEFAULT_PRIORITY,
       responseTime: 60,
       resolutionTime: 480,
     });
     setEditingSLA(null);
   };
 
-  const formatTime = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
-  };
+  const priorityLabel = (value: string) => SLA_PRIORITIES.find((p) => p.value === value)?.label ?? value;
 
-  const priorityColors = {
-    urgent: 'bg-red-100 text-red-700 border-red-200',
-    high: 'bg-orange-100 text-orange-700 border-orange-200',
-    medium: 'bg-yellow-100 text-yellow-700 border-yellow-200',
-    low: 'bg-blue-100 text-blue-700 border-blue-200',
-  };
+  const slaTableColumns: MRT_ColumnDef<SLA>[] = useMemo(
+    () => [
+      {
+        accessorKey: 'name',
+        header: 'Policy Details',
+        size: 280,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+        Cell: ({ row }) => (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+              <Clock className="w-4 h-4 text-slate-400" />
+            </div>
+            <span className="font-medium text-slate-900">{row.original.name}</span>
+          </div>
+        ),
+      },
+      {
+        accessorKey: 'priority',
+        header: 'Priority',
+        size: 120,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+        Cell: ({ row }) => (
+          <Badge
+            className={`${SLA_PRIORITY_COLORS[row.original.priority as SLAPriorityValue] ?? 'bg-slate-100 text-slate-700 border-slate-200'} border font-medium px-2 py-0`}
+          >
+            {priorityLabel(row.original.priority)}
+          </Badge>
+        ),
+      },
+      {
+        id: 'goals',
+        header: 'Goals',
+        size: 180,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+        Cell: ({ row }) => (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-[11px] text-slate-400 uppercase font-bold tracking-tight">Response / Resolution</span>
+            <div className="flex items-center gap-2">
+              <span className="text-blue-600 font-bold">{formatTime(row.original.responseTime)}</span>
+              <span className="text-slate-300">/</span>
+              <span className="text-indigo-600 font-bold">{formatTime(row.original.resolutionTime)}</span>
+            </div>
+          </div>
+        ),
+      },
+    ],
+    []
+  );
 
   return (
     <div className="h-full overflow-hidden flex flex-col bg-slate-50">
@@ -148,10 +210,11 @@ export function SLAConfig() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Priorities</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
+                    {SLA_PRIORITIES.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        {p.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -221,18 +284,19 @@ export function SLAConfig() {
                       <Label htmlFor="priority">Target Priority</Label>
                       <Select
                         value={formData.priority}
-                        onValueChange={(value: SLA['priority']) => 
+                        onValueChange={(value: SLAPriorityValue) =>
                           setFormData({ ...formData, priority: value })
                         }
                       >
                         <SelectTrigger className="bg-white">
-                          <SelectValue />
+                          <SelectValue placeholder="Select priority" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
-                          <SelectItem value="urgent">Urgent</SelectItem>
+                          {SLA_PRIORITIES.map((p) => (
+                            <SelectItem key={p.value} value={p.value}>
+                              {p.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -284,7 +348,15 @@ export function SLAConfig() {
           {/* SLA List View */}
           {viewMode === 'list' && (
             <div className="grid gap-4">
-              {filteredSLAs.length > 0 ? (
+              {slasLoading ? (
+                <div className="py-20 text-center bg-white rounded-xl border border-slate-200">
+                  <div className="animate-pulse flex flex-col items-center gap-4">
+                    <div className="h-12 w-12 rounded-xl bg-slate-200" />
+                    <div className="h-4 w-32 bg-slate-200 rounded" />
+                    <div className="h-4 w-48 bg-slate-100 rounded" />
+                  </div>
+                </div>
+              ) : filteredSLAs.length > 0 ? (
                 filteredSLAs.map((sla, index) => (
                   <motion.div
                     key={sla.id}
@@ -301,8 +373,8 @@ export function SLAConfig() {
                           <div>
                             <div className="flex items-center gap-3 mb-1">
                               <h3 className="text-base font-semibold text-slate-900">{sla.name}</h3>
-                              <Badge className={`${priorityColors[sla.priority]} border font-medium px-2 py-0`}>
-                                {sla.priority}
+                              <Badge className={`${SLA_PRIORITY_COLORS[sla.priority as SLAPriorityValue] ?? 'bg-slate-100 text-slate-700 border-slate-200'} border font-medium px-2 py-0`}>
+                                {priorityLabel(sla.priority)}
                               </Badge>
                             </div>
                             <div className="flex items-center gap-6">
@@ -329,7 +401,7 @@ export function SLAConfig() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDelete(sla.id)}
+                            onClick={() => setSlaToDelete(sla)}
                             className="h-9 w-9 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
                           >
                             <Trash2 className="w-4 h-4" />
@@ -349,78 +421,55 @@ export function SLAConfig() {
             </div>
           )}
 
-          {/* Table View */}
+          {/* Table View - MaterialReactTableWrapper */}
           {viewMode === 'table' && (
-            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50/80 border-b border-slate-200">
-                    <tr>
-                      <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Policy Details</th>
-                      <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Priority</th>
-                      <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Goals</th>
-                      <th className="text-right py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider pr-10">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {filteredSLAs.map((sla, index) => (
-                      <motion.tr
-                        key={sla.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: index * 0.02 }}
-                        className="hover:bg-slate-50/50 transition-colors"
-                      >
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center">
-                              <Clock className="w-4 h-4 text-slate-400" />
-                            </div>
-                            <span className="font-medium text-slate-900">{sla.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <Badge className={`${priorityColors[sla.priority]} border font-medium px-2 py-0`}>
-                            {sla.priority}
-                          </Badge>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="flex flex-col gap-1">
-                            <span className="text-[11px] text-slate-400 uppercase font-bold tracking-tight">Response / Resolution</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-blue-600 font-bold">{formatTime(sla.responseTime)}</span>
-                              <span className="text-slate-300">/</span>
-                              <span className="text-indigo-600 font-bold">{formatTime(sla.resolutionTime)}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6 pr-10">
-                          <div className="flex gap-1 justify-end">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEditDialog(sla)}
-                              className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDelete(sla.id)}
-                              className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </motion.tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
+            <MaterialReactTableWrapper<SLA>
+              columns={slaTableColumns}
+              data={filteredSLAs}
+              isLoading={slasLoading}
+              enableTopToolbar={false}
+              enableRowActions
+              positionActionsColumn="last"
+              emptyMessage="No SLA policies found. Try adjusting your filters or create a new policy."
+              renderRowActions={({ row }) => (
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                    onClick={() => openEditDialog(row.original)}
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => setSlaToDelete(row.original)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+            />
           )}
+
+          <AlertDialog open={!!slaToDelete} onOpenChange={(open) => !open && setSlaToDelete(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete SLA policy?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove &quot;{slaToDelete?.name}&quot;. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button variant="destructive" className="bg-red-600 hover:bg-red-700" onClick={() => void handleDelete()}>
+                  Delete
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>

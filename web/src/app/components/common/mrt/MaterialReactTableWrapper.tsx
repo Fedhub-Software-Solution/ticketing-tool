@@ -16,6 +16,8 @@ import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import FirstPageIcon from '@mui/icons-material/FirstPage';
+import LastPageIcon from '@mui/icons-material/LastPage';
 
 interface MaterialReactTableWrapperProps<T extends Record<string, any>> {
   columns: MRT_ColumnDef<T>[];
@@ -189,13 +191,30 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
     renderRowActions,
     renderDetailPanel,
     renderBottomToolbar: ({ table }: { table: MRT_TableInstance<T> }) => {
-      const { getState, getRowCount, previousPage, nextPage } = table;
+      const { getState, getRowCount, getPageCount, previousPage, nextPage, firstPage, lastPage, setPageIndex } = table;
       const { pageIndex = 0, pageSize = 10 } = getState().pagination ?? {};
       const totalRowCount = getRowCount();
+      const pageCount = getPageCount();
       const firstRow = totalRowCount === 0 ? 0 : pageIndex * pageSize + 1;
       const lastRow = Math.min(pageIndex * pageSize + pageSize, totalRowCount);
+      const disableFirst = pageIndex <= 0;
       const disablePrev = pageIndex <= 0;
-      const disableNext = lastRow >= totalRowCount;
+      const disableNext = pageIndex >= pageCount - 1;
+      const disableLast = pageCount <= 1 || pageIndex >= pageCount - 1;
+
+      // Page number buttons: show a window around current page (e.g. 1 2 3 or 2 3 4)
+      const maxVisiblePages = 5;
+      const pageNumbers =
+        pageCount <= 0
+          ? []
+          : (() => {
+              let startPage = Math.max(0, pageIndex - Math.floor(maxVisiblePages / 2));
+              let endPage = Math.min(pageCount - 1, startPage + maxVisiblePages - 1);
+              if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(0, endPage - maxVisiblePages + 1);
+              }
+              return Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+            })();
 
       return (
         <Box
@@ -215,7 +234,22 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
               Showing <strong>{firstRow}</strong> to <strong>{lastRow}</strong> of <strong>{totalRowCount}</strong> results
             </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Button
+              size="small"
+              onClick={() => firstPage()}
+              disabled={disableFirst}
+              sx={{
+                color: 'text.secondary',
+                borderColor: 'divider',
+                minWidth: 36,
+                '&.Mui-disabled': { color: 'text.disabled', borderColor: 'divider' },
+              }}
+              variant="outlined"
+              aria-label="First page"
+            >
+              <FirstPageIcon fontSize="small" />
+            </Button>
             <Button
               size="small"
               startIcon={<ChevronLeftIcon />}
@@ -230,9 +264,25 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
             >
               Previous
             </Button>
-            <Button size="small" variant="contained" sx={{ minWidth: 40 }} aria-current="page">
-              {pageIndex + 1}
-            </Button>
+            {pageNumbers.map((num) => (
+              <Button
+                key={num}
+                size="small"
+                onClick={() => setPageIndex(num)}
+                variant={pageIndex === num ? 'contained' : 'outlined'}
+                sx={{
+                  minWidth: 36,
+                  ...(pageIndex !== num && {
+                    color: 'text.secondary',
+                    borderColor: 'divider',
+                  }),
+                }}
+                aria-current={pageIndex === num ? 'page' : undefined}
+                aria-label={`Page ${num + 1}`}
+              >
+                {num + 1}
+              </Button>
+            ))}
             <Button
               size="small"
               endIcon={<ChevronRightIcon />}
@@ -246,6 +296,21 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
               variant="outlined"
             >
               Next
+            </Button>
+            <Button
+              size="small"
+              onClick={() => lastPage()}
+              disabled={disableLast}
+              sx={{
+                color: 'text.secondary',
+                borderColor: 'divider',
+                minWidth: 36,
+                '&.Mui-disabled': { color: 'text.disabled', borderColor: 'divider' },
+              }}
+              variant="outlined"
+              aria-label="Last page"
+            >
+              <LastPageIcon fontSize="small" />
             </Button>
           </Box>
         </Box>
