@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { TrendingUp, Plus, Edit, Trash2, Save, X, Bell, Users, AlertTriangle, Search, Filter, List, Table, ArrowRight } from 'lucide-react';
-import { Card } from '../common/ui/card';
-import { Button } from '../common/ui/button';
-import { Input } from '../common/ui/input';
-import { Label } from '../common/ui/label';
-import { Badge } from '../common/ui/badge';
-import { Switch } from '../common/ui/switch';
+import { Card } from '../../common/ui/card';
+import { Button } from '../../common/ui/button';
+import { Input } from '../../common/ui/input';
+import { Label } from '../../common/ui/label';
+import { Badge } from '../../common/ui/badge';
+import { Switch } from '../../common/ui/switch';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../common/ui/select';
+} from '../../common/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -21,13 +21,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '../common/ui/dialog';
+} from '../../common/ui/dialog';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '../common/ui/tooltip';
+} from '../../common/ui/tooltip';
 import { useGetEscalationRulesQuery, useCreateEscalationRuleMutation, useUpdateEscalationRuleMutation, useDeleteEscalationRuleMutation } from '@/app/store/apis/escalationRulesApi';
 import { EscalationRule } from '@/app/types';
 import { toast } from 'sonner';

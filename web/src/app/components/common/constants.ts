@@ -30,3 +30,15 @@ export const EMPTY_USER_FORM = {
   location: '',
   status: 'active' as 'active' | 'inactive',
 };
+
+export const EMPTY_ENTERPRISE = {
+  companyName: '',
+  legalName: '',
+  regNumber: '',
+  taxId: '',
+  industry: '',
+  email: '',
+  phone: '',
+  website: '',
+  address: '',
+};

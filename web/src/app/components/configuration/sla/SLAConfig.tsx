@@ -1,17 +1,17 @@
 import { useState } from 'react';
 import { Clock, Plus, Edit, Trash2, Save, X, List, Table, Search, Filter } from 'lucide-react';
-import { Card } from '../common/ui/card';
-import { Button } from '../common/ui/button';
-import { Input } from '../common/ui/input';
-import { Label } from '../common/ui/label';
-import { Badge } from '../common/ui/badge';
+import { Card } from '../../common/ui/card';
+import { Button } from '../../common/ui/button';
+import { Input } from '../../common/ui/input';
+import { Label } from '../../common/ui/label';
+import { Badge } from '../../common/ui/badge';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../common/ui/select';
+} from '../../common/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -20,13 +20,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '../common/ui/dialog';
+} from '../../common/ui/dialog';
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "../common/ui/tooltip";
+} from '../../common/ui/tooltip';
 import { useGetSLAsQuery, useCreateSLAMutation, useUpdateSLAMutation, useDeleteSLAMutation } from '@/app/store/apis/slasApi';
 import { SLA } from '@/app/types';
 import { toast } from 'sonner';
