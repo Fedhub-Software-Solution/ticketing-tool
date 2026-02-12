@@ -6,7 +6,7 @@ import { Button } from './components/common/ui/button';
 import { Dashboard } from './components/menus/Dashboard';
 import { TicketList } from './components/menus/TicketList';
 import { TicketDetail } from './components/menus/TicketDetail';
-import { SLAConfig } from './components/configuration/sla/SLAConfig';
+import { SLAConfig } from './components/configuration/sla';
 import { EscalationManagement } from './components/configuration/escalation/EscalationManagement';
 import { CategoryManagement } from './components/configuration/category/CategoryManagement';
 import { EnterpriseManagement } from './components/configuration/enterprise/EnterpriseManagement';
