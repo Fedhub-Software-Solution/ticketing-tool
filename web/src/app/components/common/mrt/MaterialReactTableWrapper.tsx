@@ -74,7 +74,7 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
   manualFiltering = false,
   manualPagination = false,
   manualSorting = false,
-  pageSize = 10,
+  pageSize = 3,
   maxHeight = '600px',
   emptyMessage = 'No data available.',
   loadingMessage = 'Loading data...',

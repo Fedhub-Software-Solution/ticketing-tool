@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { Clock, Plus, Edit, Trash2, List, Table, Search, Filter } from 'lucide-react';
-import type { MRT_ColumnDef } from 'material-react-table';
-import { Card } from '../../common/ui/card';
+import type { MRT_ColumnDef, MRT_Row } from 'material-react-table';
 import { Button } from '../../common/ui/button';
 import { Input } from '../../common/ui/input';
 import { Label } from '../../common/ui/label';
@@ -33,7 +32,6 @@ import { SLA } from '@/app/types';
 import { SLA_PRIORITIES, SLA_PRIORITY_COLORS } from '../../common/constants';
 import type { SLAPriorityValue } from '../../common/constants';
 import { toast } from 'sonner';
-import { motion } from 'motion/react';
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -43,7 +41,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../common/ui/alert-dialog';
-import { MaterialReactTableWrapper } from '../../common/mrt/MaterialReactTableWrapper';
+import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
+import { MaterialReactTableCardListWrapper } from '@/app/components/common/mrt/MaterialReactTableCardListWrapper';
 
 const DEFAULT_PRIORITY = SLA_PRIORITIES.find((p) => p.value === 'medium')!.value;
 
@@ -345,80 +344,60 @@ export function SLAConfig() {
             </div>
           </div>
 
-          {/* SLA List View */}
+          {/* SLA List View - card list via MRT wrapper */}
           {viewMode === 'list' && (
-            <div className="grid gap-4">
-              {slasLoading ? (
-                <div className="py-20 text-center bg-white rounded-xl border border-slate-200">
-                  <div className="animate-pulse flex flex-col items-center gap-4">
-                    <div className="h-12 w-12 rounded-xl bg-slate-200" />
-                    <div className="h-4 w-32 bg-slate-200 rounded" />
-                    <div className="h-4 w-48 bg-slate-100 rounded" />
+            <MaterialReactTableCardListWrapper<SLA>
+              data={filteredSLAs}
+              isLoading={slasLoading}
+              pageSize={10}
+              emptyMessage="No SLA policies found. Try adjusting your filters or create a new policy."
+              getRowId={(row: SLA) => row.id}
+              renderCardContent={(sla: SLA) => (
+                <>
+                  <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-blue-50 transition-colors shrink-0">
+                    <Clock className="w-6 h-6 text-slate-400 group-hover:text-blue-500 transition-colors" />
                   </div>
-                </div>
-              ) : filteredSLAs.length > 0 ? (
-                filteredSLAs.map((sla, index) => (
-                  <motion.div
-                    key={sla.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.03 }}
-                  >
-                    <Card className="p-5 hover:shadow-md transition-all border-slate-200 group bg-white">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1 flex items-center gap-6">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center group-hover:bg-blue-50 transition-colors">
-                            <Clock className="w-6 h-6 text-slate-400 group-hover:text-blue-500 transition-colors" />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-3 mb-1">
-                              <h3 className="text-base font-semibold text-slate-900">{sla.name}</h3>
-                              <Badge className={`${SLA_PRIORITY_COLORS[sla.priority as SLAPriorityValue] ?? 'bg-slate-100 text-slate-700 border-slate-200'} border font-medium px-2 py-0`}>
-                                {priorityLabel(sla.priority)}
-                              </Badge>
-                            </div>
-                            <div className="flex items-center gap-6">
-                              <div className="flex items-center gap-2 text-slate-500 text-sm">
-                                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                                Response: <span className="font-semibold text-slate-700">{formatTime(sla.responseTime)}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-slate-500 text-sm">
-                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
-                                Resolution: <span className="font-semibold text-slate-700">{formatTime(sla.resolutionTime)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openEditDialog(sla)}
-                            className="h-9 w-9 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSlaToDelete(sla)}
-                            className="h-9 w-9 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="text-base font-semibold text-slate-900">{sla.name}</h3>
+                      <Badge className={`${SLA_PRIORITY_COLORS[sla.priority as SLAPriorityValue] ?? 'bg-slate-100 text-slate-700 border-slate-200'} border font-medium px-2 py-0`}>
+                        {priorityLabel(sla.priority)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-2 text-slate-500 text-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-500 shrink-0" />
+                        Response: <span className="font-semibold text-slate-700">{formatTime(sla.responseTime)}</span>
                       </div>
-                    </Card>
-                  </motion.div>
-                ))
-              ) : (
-                <div className="py-20 text-center bg-white rounded-xl border border-dashed border-slate-300">
-                  <Clock className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-slate-900">No SLA policies found</h3>
-                  <p className="text-slate-500">Try adjusting your filters or create a new policy.</p>
-                </div>
+                      <div className="flex items-center gap-2 text-slate-500 text-sm">
+                        <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 shrink-0" />
+                        Resolution: <span className="font-semibold text-slate-700">{formatTime(sla.resolutionTime)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </>
               )}
-            </div>
+              renderRowActions={({ row }: { row: MRT_Row<SLA> }) => (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => openEditDialog(row.original)}
+                    className="h-9 w-9 p-0 text-slate-400 hover:text-blue-600 hover:bg-blue-50"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSlaToDelete(row.original)}
+                    className="h-9 w-9 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </>
+              )}
+            />
           )}
 
           {/* Table View - MaterialReactTableWrapper */}
@@ -431,7 +410,7 @@ export function SLAConfig() {
               enableRowActions
               positionActionsColumn="last"
               emptyMessage="No SLA policies found. Try adjusting your filters or create a new policy."
-              renderRowActions={({ row }) => (
+              renderRowActions={({ row }: { row: MRT_Row<SLA> }) => (
                 <div className="flex items-center justify-end gap-1">
                   <Button
                     variant="ghost"
