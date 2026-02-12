@@ -1,0 +1,11 @@
+export { baseApi } from './baseApi';
+export * from './authApi';
+export * from './ticketsApi';
+export * from './usersApi';
+export * from './slasApi';
+export * from './categoriesApi';
+export * from './escalationRulesApi';
+export * from './zonesApi';
+export * from './branchesApi';
+export * from './enterpriseApi';
+export * from './reportsApi';
