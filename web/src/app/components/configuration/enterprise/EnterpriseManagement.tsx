@@ -31,30 +31,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../../common/ui/alert-dialog';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../common/ui/table';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useGetEnterpriseQuery, useUpdateEnterpriseMutation } from '../../../store/apis/enterpriseApi';
 import type { EnterpriseConfig } from '../../../store/apis/enterpriseApi';
 import { useGetZonesQuery, useCreateZoneMutation, useUpdateZoneMutation, useDeleteZoneMutation } from '../../../store/apis/zonesApi';
 import type { Zone } from '../../../store/apis/zonesApi';
+import { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation } from '../../../store/apis/branchesApi';
+import type { Branch } from '../../../store/apis/branchesApi';
+import { useGetUsersQuery } from '../../../store/apis/usersApi';
 import { MaterialReactTableWrapper } from '../../common/mrt/MaterialReactTableWrapper';
 import type { MRT_ColumnDef } from 'material-react-table';
-
-const initialBranches = [
-  { id: 'BR-001', name: 'Adyar Branch', code: 'CHN-001', zone: 'Chennai', manager: 'Arun Kumar', isActive: true },
-  { id: 'BR-002', name: 'T Nagar Branch', code: 'CHN-002', zone: 'Chennai', manager: 'Priya Mani', isActive: true },
-  { id: 'BR-003', name: 'Velachery Branch', code: 'CHN-003', zone: 'Chennai', manager: 'Rajesh V', isActive: true },
-  { id: 'BR-004', name: 'Indiranagar Branch', code: 'BLR-001', zone: 'Bangalore', manager: 'Suresh Raina', isActive: true },
-  { id: 'BR-005', name: 'Koramangala Branch', code: 'BLR-002', zone: 'Bangalore', manager: 'Deepika P', isActive: true },
-];
 
 const emptyEnterprise: EnterpriseConfig = {
   companyName: '',
@@ -70,15 +57,14 @@ const emptyEnterprise: EnterpriseConfig = {
 
 export function EnterpriseManagement() {
   const [activeTab, setActiveTab] = useState<'enterprise' | 'zone' | 'branch'>('enterprise');
-  const [branches, setBranches] = useState(initialBranches);
   const [isZoneDialogOpen, setIsZoneDialogOpen] = useState(false);
   const [editingZone, setEditingZone] = useState<Zone | null>(null);
   const [isBranchDialogOpen, setIsBranchDialogOpen] = useState(false);
-  const [editingBranch, setEditingBranch] = useState<any>(null);
+  const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
+  const [branchToDelete, setBranchToDelete] = useState<Branch | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState('');
   const [zoneSearchQuery, setZoneSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [branchSearchQuery, setBranchSearchQuery] = useState('');
 
   const [zoneFormData, setZoneFormData] = useState({
     name: '',
@@ -90,7 +76,7 @@ export function EnterpriseManagement() {
   const [branchFormData, setBranchFormData] = useState({
     name: '',
     code: '',
-    zone: '',
+    zoneId: '',
     manager: '',
     isActive: true,
   });
@@ -101,10 +87,16 @@ export function EnterpriseManagement() {
   const [updateEnterprise, { isLoading: enterpriseSaving }] = useUpdateEnterpriseMutation();
 
   const { data: zonesFromApi = [], isLoading: zonesLoading } = useGetZonesQuery(undefined);
+  const { data: users = [] } = useGetUsersQuery(undefined, { skip: activeTab !== 'zone' && activeTab !== 'branch' });
   const [createZone, { isLoading: zoneCreating }] = useCreateZoneMutation();
   const [updateZone, { isLoading: zoneUpdating }] = useUpdateZoneMutation();
   const [deleteZone] = useDeleteZoneMutation();
   const [zoneToDelete, setZoneToDelete] = useState<Zone | null>(null);
+
+  const { data: branchesFromApi = [], isLoading: branchesLoading } = useGetBranchesQuery(undefined, { skip: activeTab === 'enterprise' });
+  const [createBranch, { isLoading: branchCreating }] = useCreateBranchMutation();
+  const [updateBranch, { isLoading: branchUpdating }] = useUpdateBranchMutation();
+  const [deleteBranch] = useDeleteBranchMutation();
 
   useEffect(() => {
     if (enterpriseFromApi && activeTab === 'enterprise') {
@@ -123,22 +115,6 @@ export function EnterpriseManagement() {
       toast.error(err?.data?.message || 'Failed to save enterprise settings');
     }
   };
-
-  useEffect(() => {
-    // Reset filters on tab change
-  }, [activeTab]);
-
-  const filteredBranches = branches.filter(branch => {
-    const matchesSearch = branch.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      branch.manager.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      branch.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      branch.zone.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' ||
-      (statusFilter === 'active' ? branch.isActive : !branch.isActive);
-
-    return matchesSearch && matchesStatus;
-  });
 
   const handleCreateZone = async () => {
     try {
@@ -188,29 +164,54 @@ export function EnterpriseManagement() {
     }
   };
 
-  const handleCreateBranch = () => {
-    const newBranch = {
-      id: `BR-${String(branches.length + 1).padStart(3, '0')}`,
-      ...branchFormData,
-    };
-    setBranches([...branches, newBranch]);
-    setIsBranchDialogOpen(false);
-    setBranchFormData({ name: '', code: '', zone: '', manager: '', isActive: true });
-    toast.success('Branch created successfully');
+  const handleCreateBranch = async () => {
+    try {
+      await createBranch({
+        name: branchFormData.name.trim(),
+        code: branchFormData.code || undefined,
+        zoneId: branchFormData.zoneId,
+        manager: branchFormData.manager || undefined,
+        isActive: branchFormData.isActive,
+      }).unwrap();
+      setIsBranchDialogOpen(false);
+      setBranchFormData({ name: '', code: '', zoneId: '', manager: '', isActive: true });
+      toast.success('Branch created successfully');
+    } catch (err: any) {
+      toast.error(err?.data?.message || err?.data?.error || 'Failed to create branch');
+    }
   };
 
-  const handleUpdateBranch = () => {
+  const handleUpdateBranch = async () => {
     if (!editingBranch) return;
-    setBranches(branches.map(b => b.id === editingBranch.id ? { ...editingBranch, ...branchFormData } : b));
-    setEditingBranch(null);
-    setIsBranchDialogOpen(false);
-    setBranchFormData({ name: '', code: '', zone: '', manager: '', isActive: true });
-    toast.success('Branch updated successfully');
+    try {
+      await updateBranch({
+        id: editingBranch.id,
+        body: {
+          name: branchFormData.name.trim(),
+          code: branchFormData.code || undefined,
+          zoneId: branchFormData.zoneId || undefined,
+          manager: branchFormData.manager || undefined,
+          isActive: branchFormData.isActive,
+        },
+      }).unwrap();
+      setEditingBranch(null);
+      setIsBranchDialogOpen(false);
+      setBranchFormData({ name: '', code: '', zoneId: '', manager: '', isActive: true });
+      toast.success('Branch updated successfully');
+    } catch (err: any) {
+      toast.error(err?.data?.message || err?.data?.error || 'Failed to update branch');
+    }
   };
 
-  const handleDeleteBranch = (id: string) => {
-    setBranches(branches.filter(b => b.id !== id));
-    toast.success('Branch deleted');
+  const handleDeleteBranch = async () => {
+    if (!branchToDelete) return;
+    try {
+      await deleteBranch(branchToDelete.id).unwrap();
+      setBranchToDelete(null);
+      toast.success('Branch deleted successfully');
+    } catch (err: any) {
+      toast.error(err?.data?.message || err?.data?.error || 'Failed to delete branch');
+    }
   };
 
   const zoneColumns: MRT_ColumnDef<Zone>[] = useMemo(
@@ -234,10 +235,11 @@ export function EnterpriseManagement() {
         header: 'Manager',
         size: 180,
         muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' } },
-        Cell: ({ cell }) => {
-          const val = cell.getValue<string>();
-          return val ? (
-            <span className="text-[#1976D2] cursor-pointer hover:underline font-normal">{val}</span>
+        Cell: ({ row }) => {
+          const managerId = row.original.manager;
+          const managerUser = users.find((u) => u.id === managerId);
+          return managerUser ? (
+            <span className="text-[#1976D2] font-normal">{managerUser.name}</span>
           ) : (
             <span className="text-slate-400">—</span>
           );
@@ -246,26 +248,63 @@ export function EnterpriseManagement() {
       {
         id: 'branches',
         header: 'Branches',
-        size: 140,
-        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', textAlign: 'center', whiteSpace: 'nowrap' } },
-        Cell: () => (
-          <span
-            style={{
-              display: 'inline-block',
-              padding: '4px 12px',
-              borderRadius: '9999px',
-              backgroundColor: '#f0f0f0',
-              border: '1px solid #d0d0d0',
-              fontSize: '0.8125rem',
-              color: '#334155',
-            }}
-          >
-            —
-          </span>
-        ),
+        size: 200,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' } },
+        Cell: ({ row }) => {
+          const zoneId = row.original.id;
+          const zoneBranches = branchesFromApi.filter((b) => b.zoneId === zoneId);
+          if (zoneBranches.length === 0) return <span className="text-slate-400">—</span>;
+          return (
+            <span className="text-slate-700 text-sm">
+              {zoneBranches.map((b) => b.name).join(', ')}
+            </span>
+          );
+        },
       },
     ],
-    []
+    [users, branchesFromApi]
+  );
+
+  const branchColumns: MRT_ColumnDef<Branch>[] = useMemo(
+    () => [
+      {
+        accessorKey: 'name',
+        header: 'Branch Name',
+        size: 200,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' } },
+        muiTableBodyCellProps: { sx: { color: '#334155' } },
+      },
+      {
+        accessorKey: 'code',
+        header: 'Code',
+        size: 120,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' } },
+        muiTableBodyCellProps: { sx: { color: '#334155', fontFamily: 'monospace' } },
+      },
+      {
+        accessorKey: 'zone',
+        header: 'Zone',
+        size: 140,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' } },
+        muiTableBodyCellProps: { sx: { color: '#334155' } },
+      },
+      {
+        accessorKey: 'manager',
+        header: 'Manager',
+        size: 180,
+        muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap' } },
+        Cell: ({ row }) => {
+          const managerId = row.original.manager;
+          const managerUser = users.find((u) => u.id === managerId);
+          return managerUser ? (
+            <span className="text-[#1976D2] font-normal">{managerUser.name}</span>
+          ) : (
+            <span className="text-slate-400">—</span>
+          );
+        },
+      },
+    ],
+    [users]
   );
 
   const tabs = [
@@ -388,7 +427,25 @@ export function EnterpriseManagement() {
                 <div className="space-y-4 py-4">
                   <div><Label>Zone Name</Label><Input value={zoneFormData.name} onChange={(e) => setZoneFormData({ ...zoneFormData, name: e.target.value })} placeholder="e.g. North" /></div>
                   <div><Label>Zone Code</Label><Input value={zoneFormData.code} onChange={(e) => setZoneFormData({ ...zoneFormData, code: e.target.value })} placeholder="e.g. N" /></div>
-                  <div><Label>Zone Manager</Label><Input value={zoneFormData.manager} onChange={(e) => setZoneFormData({ ...zoneFormData, manager: e.target.value })} placeholder="Optional" /></div>
+                  <div>
+                    <Label>Zone Manager</Label>
+                    <Select
+                      value={zoneFormData.manager || 'none'}
+                      onValueChange={(v) => setZoneFormData({ ...zoneFormData, manager: v === 'none' ? '' : v })}
+                    >
+                      <SelectTrigger className="w-full mt-1.5">
+                        <SelectValue placeholder="Select a user (optional)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No manager</SelectItem>
+                        {users.map((u) => (
+                          <SelectItem key={u.id} value={u.id}>
+                            {u.name} {u.email ? `(${u.email})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="flex items-center gap-2">
                     <Switch checked={zoneFormData.isActive} onCheckedChange={(v) => setZoneFormData({ ...zoneFormData, isActive: v })} />
                     <Label>Active</Label>
@@ -425,13 +482,16 @@ export function EnterpriseManagement() {
             </div>
             <MaterialReactTableWrapper<Zone>
               columns={zoneColumns}
-              data={zonesFromApi.filter(
-                (z) =>
-                  !zoneSearchQuery.trim() ||
-                  z.name.toLowerCase().includes(zoneSearchQuery.toLowerCase()) ||
-                  (z.code ?? '').toLowerCase().includes(zoneSearchQuery.toLowerCase()) ||
-                  (z.manager ?? '').toLowerCase().includes(zoneSearchQuery.toLowerCase())
-              )}
+              data={zonesFromApi.filter((z) => {
+                if (!zoneSearchQuery.trim()) return true;
+                const q = zoneSearchQuery.toLowerCase();
+                const managerName = z.manager ? users.find((u) => u.id === z.manager)?.name?.toLowerCase() ?? '' : '';
+                return (
+                  z.name.toLowerCase().includes(q) ||
+                  (z.code ?? '').toLowerCase().includes(q) ||
+                  managerName.includes(q)
+                );
+              })}
               isLoading={zonesLoading}
               enableTopToolbar={false}
               enableRowActions
@@ -472,81 +532,73 @@ export function EnterpriseManagement() {
 
         {activeTab === 'branch' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-            <div className="flex items-center justify-between gap-4 mb-6">
-              <div className="flex items-center gap-4 flex-1">
-                <div className="flex-1 max-w-md relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <Input placeholder="Search branches..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10 bg-white" />
+            <Dialog open={isBranchDialogOpen} onOpenChange={setIsBranchDialogOpen}>
+              <DialogContent aria-describedby={undefined}>
+                <DialogHeader>
+                  <DialogTitle>{editingBranch ? 'Edit Branch' : 'Create New Branch'}</DialogTitle>
+                  <DialogDescription>Enter the details for the branch.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div><Label>Branch Name</Label><Input value={branchFormData.name} onChange={(e) => setBranchFormData({ ...branchFormData, name: e.target.value })} placeholder="e.g. Chennai Main" /></div>
+                  <div><Label>Branch Code</Label><Input value={branchFormData.code} onChange={(e) => setBranchFormData({ ...branchFormData, code: e.target.value })} placeholder="e.g. CHN-M" /></div>
+                  <div>
+                    <Label>Zone</Label>
+                    <Select value={branchFormData.zoneId} onValueChange={(val) => setBranchFormData({ ...branchFormData, zoneId: val })}>
+                      <SelectTrigger className="w-full mt-1.5"><SelectValue placeholder="Select Zone" /></SelectTrigger>
+                      <SelectContent>{(zonesFromApi ?? []).map((z) => <SelectItem key={z.id} value={z.id}>{z.name}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Branch Manager</Label>
+                    <Select value={branchFormData.manager || 'none'} onValueChange={(v) => setBranchFormData({ ...branchFormData, manager: v === 'none' ? '' : v })}>
+                      <SelectTrigger className="w-full mt-1.5"><SelectValue placeholder="Select a user (optional)" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No manager</SelectItem>
+                        {users.map((u) => <SelectItem key={u.id} value={u.id}>{u.name} {u.email ? `(${u.email})` : ''}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={branchFormData.isActive} onCheckedChange={(v) => setBranchFormData({ ...branchFormData, isActive: v })} />
+                    <Label>Active</Label>
+                  </div>
                 </div>
-              </div>
-              <Dialog open={isBranchDialogOpen} onOpenChange={setIsBranchDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button className="gap-2 bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => {
-                    setEditingBranch(null);
-                    setBranchFormData({ name: '', code: '', zone: '', manager: '', isActive: true });
-                  }}>
-                    <Plus className="w-4 h-4" /> Add Branch
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => { setIsBranchDialogOpen(false); setEditingBranch(null); }}>Cancel</Button>
+                  <Button onClick={editingBranch ? handleUpdateBranch : handleCreateBranch} disabled={branchCreating || branchUpdating || !branchFormData.name.trim() || !branchFormData.zoneId}>
+                    {branchCreating || branchUpdating ? 'Saving...' : editingBranch ? 'Update' : 'Create'}
                   </Button>
-                </DialogTrigger>
-                <DialogContent aria-describedby={undefined}>
-                  <DialogHeader>
-                    <DialogTitle>{editingBranch ? 'Edit Branch' : 'Create New Branch'}</DialogTitle>
-                    <DialogDescription>
-                      Enter the details for the branch.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <div><Label>Branch Name</Label><Input value={branchFormData.name} onChange={(e) => setBranchFormData({...branchFormData, name: e.target.value})} /></div>
-                    <div><Label>Branch Code</Label><Input value={branchFormData.code} onChange={(e) => setBranchFormData({...branchFormData, code: e.target.value})} /></div>
-                    <div>
-                      <Label>Zone</Label>
-                      <Select value={branchFormData.zone} onValueChange={(val) => setBranchFormData({...branchFormData, zone: val})}>
-                        <SelectTrigger><SelectValue placeholder="Select Zone" /></SelectTrigger>
-                        <SelectContent>{(zonesFromApi ?? []).map(z => <SelectItem key={z.id} value={z.name}>{z.name}</SelectItem>)}</SelectContent>
-                      </Select>
-                    </div>
-                    <div><Label>Branch Manager</Label><Input value={branchFormData.manager} onChange={(e) => setBranchFormData({...branchFormData, manager: e.target.value})} /></div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setIsBranchDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={editingBranch ? handleUpdateBranch : handleCreateBranch}>{editingBranch ? 'Update' : 'Create'}</Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+                </div>
+              </DialogContent>
+            </Dialog>
+            <div className="flex items-center justify-between gap-4 mb-6">
+              <div className="flex-1 max-w-md relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <Input placeholder="Search branches..." value={branchSearchQuery} onChange={(e) => setBranchSearchQuery(e.target.value)} className="pl-10 bg-white border-slate-200 h-10" />
+              </div>
+              <Button className="gap-2 bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => { setEditingBranch(null); setBranchFormData({ name: '', code: '', zoneId: '', manager: '', isActive: true }); setIsBranchDialogOpen(true); }}>
+                <Plus className="w-4 h-4" /> Add Branch
+              </Button>
             </div>
-            <Card className="border-slate-200 shadow-sm overflow-hidden bg-white mb-8">
-              <Table>
-                <TableHeader className="bg-slate-50">
-                  <TableRow>
-                    <TableHead className="py-4 pl-6 text-slate-900 font-bold">Branch Name</TableHead>
-                    <TableHead className="py-4 text-slate-900 font-bold">Code</TableHead>
-                    <TableHead className="py-4 text-slate-900 font-bold">Zone</TableHead>
-                    <TableHead className="py-4 text-slate-900 font-bold">Manager</TableHead>
-                    <TableHead className="text-right py-4 pr-6 text-slate-900 font-bold">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredBranches.map((branch) => (
-                    <TableRow key={branch.id} className="hover:bg-slate-50/50">
-                      <TableCell className="font-semibold text-slate-900 py-4 pl-6">{branch.name}</TableCell>
-                      <TableCell className="py-4 font-mono text-xs">{branch.code}</TableCell>
-                      <TableCell className="py-4 text-slate-700">{branch.zone}</TableCell>
-                      <TableCell className="py-4 text-slate-700">{branch.manager}</TableCell>
-                      <TableCell className="text-right py-4 pr-6">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => {
-                            setEditingBranch(branch);
-                            setBranchFormData({ name: branch.name, code: branch.code, zone: branch.zone, manager: branch.manager, isActive: branch.isActive });
-                            setIsBranchDialogOpen(true);
-                          }}><Edit className="w-4 h-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteBranch(branch.id)}><Trash2 className="w-4 h-4" /></Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </Card>
+            <MaterialReactTableWrapper<Branch>
+              columns={branchColumns}
+              data={branchesFromApi.filter((b) => {
+                if (!branchSearchQuery.trim()) return true;
+                const q = branchSearchQuery.toLowerCase();
+                const managerName = b.manager ? users.find((u) => u.id === b.manager)?.name?.toLowerCase() ?? '' : '';
+                return b.name.toLowerCase().includes(q) || (b.code ?? '').toLowerCase().includes(q) || (b.zone ?? '').toLowerCase().includes(q) || managerName.includes(q);
+              })}
+              isLoading={branchesLoading}
+              enableTopToolbar={false}
+              enableRowActions
+              positionActionsColumn="last"
+              renderRowActions={({ row }) => (
+                <div className="flex items-center justify-start gap-1">
+                  <Button variant="ghost" size="icon" className="text-slate-600 hover:text-slate-900 hover:bg-slate-100" onClick={() => { const branch = row.original; setEditingBranch(branch); setBranchFormData({ name: branch.name, code: branch.code ?? '', zoneId: branch.zoneId, manager: branch.manager ?? '', isActive: branch.isActive }); setIsBranchDialogOpen(true); }}><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" className="text-slate-600 hover:text-slate-900 hover:bg-slate-100" onClick={() => setBranchToDelete(row.original)}><Trash2 className="w-4 h-4" /></Button>
+                </div>
+              )}
+            />
           </motion.div>
         )}
         <AlertDialog open={!!zoneToDelete} onOpenChange={(open) => !open && setZoneToDelete(null)}>
@@ -559,13 +611,21 @@ export function EnterpriseManagement() {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <Button
-                variant="destructive"
-                className="bg-red-600 hover:bg-red-700"
-                onClick={() => void handleDeleteZone()}
-              >
-                Delete
-              </Button>
+              <Button variant="destructive" className="bg-red-600 hover:bg-red-700" onClick={() => void handleDeleteZone()}>Delete</Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+        <AlertDialog open={!!branchToDelete} onOpenChange={(open) => !open && setBranchToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete branch?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently remove the branch &quot;{branchToDelete?.name}&quot;. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <Button variant="destructive" className="bg-red-600 hover:bg-red-700" onClick={() => void handleDeleteBranch()}>Delete</Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

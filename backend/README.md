@@ -41,7 +41,7 @@ After running `02_seed.sql` you can log in with:
 - **Password:** `admin123`
 
 If login returns **500**: the admin password may be in the wrong format. Update it with:
-`node scripts/run-sql.js sql/03_fix_admin_password.sql`
+`node scripts/run-sql.cjs sql/03_fix_admin_password.sql`
 Then try logging in again with admin@company.com / admin123.
 
 ## Endpoints

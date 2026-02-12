@@ -12,9 +12,9 @@ function toUserResponse(row: any): UserResponse {
     name: row.name,
     email: row.email,
     role: row.role,
-    avatar: row.avatar,
-    zone: row.zone,
-    branch: row.branch,
+    avatar: row.avatar_url,
+    zone: row.zone_id,
+    branch: row.branch_id,
     location: row.location,
     status: row.status,
   };
@@ -27,7 +27,7 @@ export async function login(req: AuthRequest, res: Response): Promise<void> {
     return;
   }
   const r = await pool.query(
-    'SELECT id, name, email, password_hash, role, avatar, zone, branch, location, status FROM users WHERE email = $1 AND status = $2',
+    'SELECT id, name, email, password_hash, role, avatar_url, zone_id, branch_id, location, status FROM users WHERE LOWER(email) = LOWER($1) AND status = $2',
     [email, 'active']
   );
   const row = r.rows[0];
@@ -57,7 +57,7 @@ export async function register(req: AuthRequest, res: Response): Promise<void> {
   const hash = await bcrypt.hash(password, 10);
   const r = await pool.query(
     `INSERT INTO users (name, email, password_hash, role) VALUES ($1, $2, $3, $4)
-     RETURNING id, name, email, role, avatar, zone, branch, location, status`,
+     RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status`,
     [name, email, hash, role]
   );
   const row = r.rows[0];
@@ -71,7 +71,7 @@ export async function register(req: AuthRequest, res: Response): Promise<void> {
 
 export async function me(req: AuthRequest, res: Response): Promise<void> {
   const r = await pool.query(
-    'SELECT id, name, email, role, avatar, zone, branch, location, status FROM users WHERE id = $1',
+    'SELECT id, name, email, role, avatar_url, zone_id, branch_id, location, status FROM users WHERE id = $1',
     [req.user!.userId]
   );
   const row = r.rows[0];

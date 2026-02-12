@@ -9,9 +9,9 @@ function toUserResponse(row: any): UserResponse {
     name: row.name,
     email: row.email,
     role: row.role,
-    avatar: row.avatar,
-    zone: row.zone,
-    branch: row.branch,
+    avatar: row.avatar_url,
+    zone: row.zone_id,
+    branch: row.branch_id,
     location: row.location,
     status: row.status,
   };
@@ -19,7 +19,7 @@ function toUserResponse(row: any): UserResponse {
 
 export async function listUsers(req: AuthRequest, res: Response): Promise<void> {
   const r = await pool.query(
-    'SELECT id, name, email, role, avatar, zone, branch, location, status FROM users ORDER BY name'
+    'SELECT id, name, email, role, avatar_url, zone_id, branch_id, location, status FROM users ORDER BY name'
   );
   res.json(r.rows.map(toUserResponse));
 }
@@ -27,7 +27,7 @@ export async function listUsers(req: AuthRequest, res: Response): Promise<void> 
 export async function getUser(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
   const r = await pool.query(
-    'SELECT id, name, email, role, avatar, zone, branch, location, status FROM users WHERE id = $1',
+    'SELECT id, name, email, role, avatar_url, zone_id, branch_id, location, status FROM users WHERE id = $1',
     [id]
   );
   const row = r.rows[0];
@@ -53,11 +53,11 @@ export async function updateUser(req: AuthRequest, res: Response): Promise<void>
     values.push(role);
   }
   if (zone !== undefined) {
-    updates.push(`zone = $${i++}`);
+    updates.push(`zone_id = $${i++}`);
     values.push(zone);
   }
   if (branch !== undefined) {
-    updates.push(`branch = $${i++}`);
+    updates.push(`branch_id = $${i++}`);
     values.push(branch);
   }
   if (location !== undefined) {
@@ -74,7 +74,7 @@ export async function updateUser(req: AuthRequest, res: Response): Promise<void>
   }
   values.push(id);
   const r = await pool.query(
-    `UPDATE users SET ${updates.join(', ')} WHERE id = $${i} RETURNING id, name, email, role, avatar, zone, branch, location, status`,
+    `UPDATE users SET ${updates.join(', ')} WHERE id = $${i} RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status`,
     values
   );
   const row = r.rows[0];

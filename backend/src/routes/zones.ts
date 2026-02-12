@@ -7,4 +7,5 @@ router.use(authMiddleware);
 router.get('/', zonesController.listZones);
 router.post('/', requireRoles('admin', 'manager'), zonesController.createZone);
 router.patch('/:id', requireRoles('admin', 'manager'), zonesController.updateZone);
+router.delete('/:id', requireRoles('admin', 'manager'), zonesController.deleteZone);
 export default router;

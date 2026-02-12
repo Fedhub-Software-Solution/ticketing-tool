@@ -30,7 +30,11 @@ export const branchesApi = baseApi.injectEndpoints({
       query: ({ id, body }) => ({ url: `branches/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _err, { id }) => [{ type: 'Branches', id }, { type: 'Branches', id: 'LIST' }],
     }),
+    deleteBranch: build.mutation<void, string>({
+      query: (id) => ({ url: `branches/${id}`, method: 'DELETE' }),
+      invalidatesTags: (_result, _err, id) => [{ type: 'Branches', id }, { type: 'Branches', id: 'LIST' }],
+    }),
   }),
 });
 
-export const { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation } = branchesApi;
+export const { useGetBranchesQuery, useCreateBranchMutation, useUpdateBranchMutation, useDeleteBranchMutation } = branchesApi;

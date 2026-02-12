@@ -44,3 +44,19 @@ export async function updateZone(req: AuthRequest, res: Response): Promise<void>
   }
   res.json(toZone(row));
 }
+
+export async function deleteZone(req: AuthRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+  const check = await pool.query('SELECT 1 FROM branches WHERE zone_id = $1 LIMIT 1', [id]);
+  if (check.rows.length > 0) {
+    res.status(400).json({ message: 'Cannot delete zone that has branches. Remove or reassign branches first.' });
+    return;
+  }
+  const r = await pool.query('DELETE FROM zones WHERE id = $1 RETURNING id', [id]);
+  const row = r.rows[0];
+  if (!row) {
+    res.status(404).json({ message: 'Zone not found' });
+    return;
+  }
+  res.status(204).send();
+}

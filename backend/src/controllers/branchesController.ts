@@ -24,7 +24,7 @@ export async function listBranches(_req: AuthRequest, res: Response): Promise<vo
 export async function createBranch(req: AuthRequest, res: Response): Promise<void> {
   const { name, code, zoneId, manager, isActive } = req.body;
   if (!name || !zoneId) {
-    res.status(400).json({ error: 'name and zoneId required' });
+    res.status(400).json({ message: 'Name and zone are required' });
     return;
   }
   const r = await pool.query(
@@ -55,4 +55,15 @@ export async function updateBranch(req: AuthRequest, res: Response): Promise<voi
     [id]
   );
   res.json(toBranch(withZone.rows[0]));
+}
+
+export async function deleteBranch(req: AuthRequest, res: Response): Promise<void> {
+  const { id } = req.params;
+  const r = await pool.query('DELETE FROM branches WHERE id = $1 RETURNING id', [id]);
+  const row = r.rows[0];
+  if (!row) {
+    res.status(404).json({ message: 'Branch not found' });
+    return;
+  }
+  res.status(204).send();
 }
