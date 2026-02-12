@@ -59,3 +59,25 @@ export const SLA_PRIORITY_COLORS: Record<SLAPriorityValue, string> = {
   medium: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   low: 'bg-blue-100 text-blue-700 border-blue-200',
 };
+
+/** Default SLA priority (medium). */
+export const SLA_DEFAULT_PRIORITY = SLA_PRIORITIES.find((p) => p.value === 'medium')!.value;
+
+/** Initial form state for create/edit SLA. */
+export const SLA_INITIAL_FORM = {
+  name: '',
+  priority: SLA_DEFAULT_PRIORITY as SLAPriorityValue,
+  responseTime: 60,
+  resolutionTime: 480,
+} as const;
+
+export type SLAFormData = {
+  name: string;
+  priority: SLAPriorityValue;
+  responseTime: number;
+  resolutionTime: number;
+};
+
+/** Empty state message for SLA list/table. */
+export const SLA_EMPTY_MESSAGE =
+  'No SLA policies found. Try adjusting your filters or create a new policy.';

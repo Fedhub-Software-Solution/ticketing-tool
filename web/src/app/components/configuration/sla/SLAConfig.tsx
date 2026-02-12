@@ -11,7 +11,11 @@ import {
 } from '@/app/store/apis/slasApi';
 import type { SLA } from '@/app/types';
 import { toast } from 'sonner';
-import { EMPTY_MESSAGE, INITIAL_FORM, type SLAFormData } from './constants';
+import {
+  SLA_EMPTY_MESSAGE,
+  SLA_INITIAL_FORM,
+  type SLAFormData,
+} from '@/app/components/common/constants';
 import { getSlaTableColumns } from './slaTableColumns';
 import { SLACardContent } from './SLACardContent';
 import { SlaRowActions } from './SlaRowActions';
@@ -30,7 +34,7 @@ export function SLAConfig() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingSLA, setEditingSLA] = useState<SLA | null>(null);
   const [slaToDelete, setSlaToDelete] = useState<SLA | null>(null);
-  const [formData, setFormData] = useState<SLAFormData>({ ...INITIAL_FORM });
+  const [formData, setFormData] = useState<SLAFormData>({ ...SLA_INITIAL_FORM });
 
   const filteredSLAs = useMemo(
     () =>
@@ -48,7 +52,7 @@ export function SLAConfig() {
   const slaTableColumns = useMemo(() => getSlaTableColumns(), []);
 
   const resetForm = useCallback(() => {
-    setFormData({ ...INITIAL_FORM });
+    setFormData({ ...SLA_INITIAL_FORM });
     setEditingSLA(null);
   }, []);
 
@@ -129,7 +133,7 @@ export function SLAConfig() {
               data={filteredSLAs}
               isLoading={slasLoading}
               pageSize={10}
-              emptyMessage={EMPTY_MESSAGE}
+              emptyMessage={SLA_EMPTY_MESSAGE}
               getRowId={(row: SLA) => row.id}
               renderCardContent={(sla: SLA) => <SLACardContent sla={sla} />}
               renderRowActions={({ row }: { row: MRT_Row<SLA> }) => (
@@ -151,7 +155,7 @@ export function SLAConfig() {
               enableTopToolbar={false}
               enableRowActions
               positionActionsColumn="last"
-              emptyMessage={EMPTY_MESSAGE}
+              emptyMessage={SLA_EMPTY_MESSAGE}
               renderRowActions={({ row }: { row: MRT_Row<SLA> }) => (
                 <SlaRowActions
                   row={row}

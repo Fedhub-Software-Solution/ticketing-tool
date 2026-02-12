@@ -21,7 +21,7 @@ import {
 import { SLA_PRIORITIES } from '@/app/components/common/constants';
 import type { SLAPriorityValue } from '@/app/components/common/constants';
 import type { SLA } from '@/app/types';
-import type { SLAFormData } from './constants';
+import type { SLAFormData } from '@/app/components/common/constants';
 
 export function SLAFormDialog({
   open,

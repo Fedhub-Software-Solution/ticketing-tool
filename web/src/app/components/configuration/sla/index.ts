@@ -6,9 +6,9 @@ export { SLAConfigToolbar } from './SLAConfigToolbar';
 export { SLADeleteDialog } from './SLADeleteDialog';
 export { getSlaTableColumns } from './slaTableColumns';
 export {
-  DEFAULT_PRIORITY,
-  EMPTY_MESSAGE,
-  INITIAL_FORM,
+  SLA_DEFAULT_PRIORITY,
+  SLA_EMPTY_MESSAGE,
+  SLA_INITIAL_FORM,
   type SLAFormData,
-} from './constants';
-export { formatTime, priorityLabel } from './utils';
+} from '@/app/components/common/constants';
+export { formatTime, priorityLabel } from '@/app/components/common/utils';

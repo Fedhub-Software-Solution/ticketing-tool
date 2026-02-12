@@ -16,7 +16,7 @@ import {
 } from '@/app/components/common/ui/tooltip';
 import { SLA_PRIORITIES } from '@/app/components/common/constants';
 import { SLAFormDialog } from './SLAFormDialog';
-import type { SLAFormData } from './constants';
+import type { SLAFormData } from '@/app/components/common/constants';
 import type { SLA } from '@/app/types';
 
 type ViewMode = 'list' | 'table';

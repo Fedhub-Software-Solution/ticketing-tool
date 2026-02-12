@@ -4,7 +4,7 @@ import { Badge } from '@/app/components/common/ui/badge';
 import { SLA_PRIORITY_COLORS } from '@/app/components/common/constants';
 import type { SLAPriorityValue } from '@/app/components/common/constants';
 import type { SLA } from '@/app/types';
-import { formatTime, priorityLabel } from './utils';
+import { formatTime, priorityLabel } from '@/app/components/common/utils';
 
 export function getSlaTableColumns(): MRT_ColumnDef<SLA>[] {
   return [
