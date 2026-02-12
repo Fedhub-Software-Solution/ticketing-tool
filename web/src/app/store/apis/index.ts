@@ -9,3 +9,4 @@ export * from './zonesApi';
 export * from './branchesApi';
 export * from './enterpriseApi';
 export * from './reportsApi';
+export * from './rolesApi';

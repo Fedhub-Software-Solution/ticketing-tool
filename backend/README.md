@@ -17,7 +17,9 @@ Node.js + Express REST API for the Ticketing Tool. Used by the React web app and
    ```bash
    psql -U postgres -d ticketing_tool -f sql/01_schema.sql
    psql -U postgres -d ticketing_tool -f sql/02_seed.sql
+   psql -U postgres -d ticketing_tool -f sql/04_roles.sql
    ```
+   With Node: after `db:setup`, run `node scripts/run-sql.cjs sql/04_roles.sql` to create the roles table and seed system roles (for Access Management).
 
 2. **Environment**: Copy `.env.example` to `.env` and set:
    - `DATABASE_URL` – PostgreSQL connection string, e.g. `postgresql://postgres:YOUR_PASSWORD@localhost:5432/ticketing_tool`  

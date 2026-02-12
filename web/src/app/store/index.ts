@@ -11,6 +11,7 @@ import './apis/zonesApi';
 import './apis/branchesApi';
 import './apis/enterpriseApi';
 import './apis/reportsApi';
+import './apis/rolesApi';
 
 export const store = configureStore({
   reducer: {
