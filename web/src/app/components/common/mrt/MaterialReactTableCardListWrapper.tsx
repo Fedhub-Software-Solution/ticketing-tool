@@ -207,7 +207,12 @@ export function MaterialReactTableCardListWrapper<T extends Record<string, any>>
     muiTablePaperProps: { sx: { borderRadius: '12px', overflow: 'hidden', boxShadow: 'none' } },
     muiTableHeadCellProps: { sx: { border: 'none', p: 0, height: 0, display: 'none' } },
     muiTableHeadRowProps: { sx: { display: 'none' } },
-    muiTableBodyRowProps: () => ({ sx: { '& td': { border: 'none', paddingBlock: '0.5rem', paddingInline: 0, verticalAlign: 'top' } } }),
+    muiTableBodyRowProps: () => ({
+      hover: false,
+      sx: {
+        '& td': { border: 'none', paddingBlock: '0.5rem', paddingInline: 0, verticalAlign: 'top' },
+      },
+    }),
     muiTableBodyCellProps: { sx: { border: 'none', padding: 0 } },
     renderBottomToolbar: enableBottomToolbar ? ({ table: t }) => renderPaginationToolbar(t, renderBottomToolbarCustomActions) : undefined,
   });

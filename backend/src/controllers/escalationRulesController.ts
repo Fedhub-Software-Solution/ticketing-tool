@@ -35,7 +35,7 @@ export async function createRule(req: AuthRequest, res: Response): Promise<void>
       triggerAfter,
       level1Escalate || '',
       level2Escalate || '',
-      JSON.stringify(notifyUsers || []),
+      Array.isArray(notifyUsers) ? notifyUsers : [],
       !!autoEscalate,
     ]
   );
@@ -57,7 +57,7 @@ export async function updateRule(req: AuthRequest, res: Response): Promise<void>
       triggerAfter,
       level1Escalate,
       level2Escalate,
-      notifyUsers != null ? JSON.stringify(notifyUsers) : null,
+      notifyUsers != null && Array.isArray(notifyUsers) ? notifyUsers : null,
       autoEscalate,
       id,
     ]

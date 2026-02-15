@@ -1,4 +1,4 @@
-import { Ticket, SLA, EscalationRule, Category, User } from '@/app/types';
+import { Ticket, SLA, Category, User } from '@/app/types';
 
 // Mock users with different roles and regional assignments
 export const mockUsers: User[] = [
@@ -218,50 +218,6 @@ export const mockSLAs: SLA[] = [
     priority: 'low',
     responseTime: 480, // 8 hours
     resolutionTime: 2880, // 48 hours
-  },
-];
-
-// Mock escalation rules
-export const mockEscalationRules: EscalationRule[] = [
-  {
-    id: 'ESC-001',
-    name: 'Urgent Ticket Escalation',
-    priority: 'urgent',
-    triggerAfter: 30, // 30 minutes
-    level1Escalate: 'Technical Lead',
-    level2Escalate: 'Senior Support Manager',
-    notifyUsers: ['manager@company.com', 'director@company.com'],
-    autoEscalate: true,
-  },
-  {
-    id: 'ESC-002',
-    name: 'High Priority Escalation',
-    priority: 'high',
-    triggerAfter: 120, // 2 hours
-    level1Escalate: 'Senior Agent',
-    level2Escalate: 'Team Lead',
-    notifyUsers: ['teamlead@company.com'],
-    autoEscalate: true,
-  },
-  {
-    id: 'ESC-003',
-    name: 'Medium Priority Escalation',
-    priority: 'medium',
-    triggerAfter: 480, // 8 hours
-    level1Escalate: 'Senior Agent',
-    level2Escalate: 'Team Lead',
-    notifyUsers: ['teamlead@company.com'],
-    autoEscalate: false,
-  },
-  {
-    id: 'ESC-004',
-    name: 'Low Priority Escalation',
-    priority: 'low',
-    triggerAfter: 1440, // 24 hours
-    level1Escalate: 'Senior Agent',
-    level2Escalate: 'Team Lead',
-    notifyUsers: ['teamlead@company.com'],
-    autoEscalate: false,
   },
 ];
 
