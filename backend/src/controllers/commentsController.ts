@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { pool } from '../db';
 import { AuthRequest } from '../middleware';
+import { createNotification } from './notificationsController';
 
 function toComment(row: any) {
   return {
@@ -27,11 +28,15 @@ export async function listComments(req: AuthRequest, res: Response): Promise<voi
 export async function createComment(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
   const { text } = req.body;
+  if (!req.user?.userId) {
+    res.status(401).json({ error: 'Unauthorized: login required to add comments' });
+    return;
+  }
   if (!text || !text.trim()) {
     res.status(400).json({ error: 'text required' });
     return;
   }
-  const authorId = req.user!.userId;
+  const authorId = req.user.userId;
   const r = await pool.query(
     `INSERT INTO ticket_comments (ticket_id, author_id, text) VALUES ($1, $2, $3) RETURNING *`,
     [id, authorId, text.trim()]
@@ -41,6 +46,24 @@ export async function createComment(req: AuthRequest, res: Response): Promise<vo
     'SELECT c.*, u.name AS author_name FROM ticket_comments c JOIN users u ON c.author_id = u.id WHERE c.id = $1',
     [row.id]
   );
+  const ticketRow = await pool.query(
+    'SELECT title, assigned_to_id, created_by_id FROM tickets WHERE id = $1',
+    [id]
+  );
+  const ticket = ticketRow.rows[0];
+  if (ticket) {
+    const notifyUserId = ticket.assigned_to_id || ticket.created_by_id;
+    if (notifyUserId && notifyUserId !== authorId) {
+      const title = ticket.title || id;
+      createNotification(
+        notifyUserId,
+        'comment',
+        'Comment added',
+        `New comment on ${title}`,
+        id
+      ).catch(() => {});
+    }
+  }
   res.status(201).json(toComment(withAuthor.rows[0]));
 }
 

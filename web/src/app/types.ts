@@ -10,6 +10,16 @@ export interface User {
   branch?: string;
   location?: string;
   status: 'active' | 'inactive';
+  /** Resolved zone name (from GET /auth/me) */
+  zoneName?: string;
+  /** Resolved branch name (from GET /auth/me) */
+  branchName?: string;
+  /** Notification: new assignments & mentions */
+  emailAlerts?: boolean;
+  /** Notification: breach notifications */
+  slaWarnings?: boolean;
+  /** Notification: real-time desktop push */
+  desktopPush?: boolean;
 }
 
 export interface SLA {
@@ -46,7 +56,7 @@ export interface Ticket {
   id: string;
   title: string;
   description: string;
-  status: 'open' | 'in-progress' | 'resolved' | 'closed';
+  status: 'open' | 'in-progress' | 'on-hold' | 'resolved' | 'closed';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   category: string;
   subCategory?: string;

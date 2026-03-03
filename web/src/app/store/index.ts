@@ -12,6 +12,7 @@ import './apis/branchesApi';
 import './apis/enterpriseApi';
 import './apis/reportsApi';
 import './apis/rolesApi';
+import './apis/notificationsApi';
 
 export const store = configureStore({
   reducer: {

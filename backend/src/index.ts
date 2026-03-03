@@ -13,6 +13,7 @@ import enterpriseRoutes from './routes/enterprise';
 import ticketsRoutes from './routes/tickets';
 import reportsRoutes from './routes/reports';
 import rolesRoutes from './routes/roles';
+import notificationsRoutes from './routes/notifications';
 
 const app = express();
 app.use(cors());
@@ -33,6 +34,7 @@ app.use('/api/enterprise', enterpriseRoutes);
 app.use('/api/tickets', ticketsRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/roles', rolesRoutes);
+app.use('/api/notifications', notificationsRoutes);
 
 app.use(errorHandler);
 

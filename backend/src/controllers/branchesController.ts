@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { pool } from '../db';
 import { AuthRequest } from '../middleware';
+import { sendBranchNotificationEmail } from '../services/email';
 
 function toBranch(row: any) {
   return {
@@ -36,7 +37,22 @@ export async function createBranch(req: AuthRequest, res: Response): Promise<voi
     'SELECT b.*, z.name AS zone_name FROM branches b LEFT JOIN zones z ON b.zone_id = z.id WHERE b.id = $1',
     [row.id]
   );
-  res.status(201).json(toBranch(withZone.rows[0]));
+  const branchRow = withZone.rows[0];
+  if (manager) {
+    const userRow = await pool.query('SELECT name, email FROM users WHERE id = $1', [manager]);
+    const u = userRow.rows[0];
+    if (u?.email) {
+      await sendBranchNotificationEmail(
+        u.email,
+        u.name || 'Manager',
+        branchRow.name,
+        branchRow.code ?? undefined,
+        branchRow.zone_name ?? undefined,
+        'created'
+      );
+    }
+  }
+  res.status(201).json(toBranch(branchRow));
 }
 
 export async function updateBranch(req: AuthRequest, res: Response): Promise<void> {
@@ -54,7 +70,22 @@ export async function updateBranch(req: AuthRequest, res: Response): Promise<voi
     'SELECT b.*, z.name AS zone_name FROM branches b LEFT JOIN zones z ON b.zone_id = z.id WHERE b.id = $1',
     [id]
   );
-  res.json(toBranch(withZone.rows[0]));
+  const branchRow = withZone.rows[0];
+  if (branchRow?.manager) {
+    const userRow = await pool.query('SELECT name, email FROM users WHERE id = $1', [branchRow.manager]);
+    const u = userRow.rows[0];
+    if (u?.email) {
+      await sendBranchNotificationEmail(
+        u.email,
+        u.name || 'Manager',
+        branchRow.name,
+        branchRow.code ?? undefined,
+        branchRow.zone_name ?? undefined,
+        'updated'
+      );
+    }
+  }
+  res.json(toBranch(branchRow));
 }
 
 export async function deleteBranch(req: AuthRequest, res: Response): Promise<void> {

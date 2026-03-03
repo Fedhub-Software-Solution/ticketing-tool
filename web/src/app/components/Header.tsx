@@ -17,6 +17,7 @@ import {
 import { User } from '@/app/types';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDistanceToNow } from 'date-fns';
+import { useGetNotificationsQuery, useMarkNotificationReadMutation, useMarkAllNotificationsReadMutation } from '@/app/store/apis/notificationsApi';
 
 interface HeaderProps {
   currentUser: User;
@@ -25,52 +26,13 @@ interface HeaderProps {
   currentView?: string;
 }
 
-// Mock notifications
-const mockNotifications = [
-  {
-    id: '1',
-    title: 'New ticket assigned',
-    description: 'TKT-2043 has been assigned to you',
-    time: new Date(Date.now() - 5 * 60 * 1000),
-    read: false,
-    type: 'assignment' as const,
-  },
-  {
-    id: '2',
-    title: 'SLA breach warning',
-    description: 'TKT-2019 is approaching SLA deadline',
-    time: new Date(Date.now() - 15 * 60 * 1000),
-    read: false,
-    type: 'warning' as const,
-  },
-  {
-    id: '3',
-    title: 'Ticket escalated',
-    description: 'TKT-2001 has been escalated to Level 2',
-    time: new Date(Date.now() - 30 * 60 * 1000),
-    read: false,
-    type: 'escalation' as const,
-  },
-  {
-    id: '4',
-    title: 'Comment added',
-    description: 'New comment on TKT-2015',
-    time: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    read: true,
-    type: 'comment' as const,
-  },
-  {
-    id: '5',
-    title: 'Ticket resolved',
-    description: 'TKT-1998 has been marked as resolved',
-    time: new Date(Date.now() - 4 * 60 * 60 * 1000),
-    read: true,
-    type: 'success' as const,
-  },
-];
-
 export function Header({ currentUser, onLogout, onNavigate, currentView }: HeaderProps) {
-  const unreadCount = mockNotifications.filter(n => !n.read).length;
+  const { data: notifications = [], isLoading: notificationsLoading } = useGetNotificationsQuery(undefined, {
+    pollingInterval: 15000,
+  });
+  const [markRead] = useMarkNotificationReadMutation();
+  const [markAllRead] = useMarkAllNotificationsReadMutation();
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   const getNotificationIcon = (type: string) => {
     const iconClass = "w-4 h-4";
@@ -197,44 +159,66 @@ export function Header({ currentUser, onLogout, onNavigate, currentView }: Heade
             </div>
             
             <div className="max-h-[400px] overflow-y-auto bg-white">
-              <AnimatePresence>
-                {mockNotifications.map((notification, index) => (
-                  <motion.div
-                    key={notification.id}
-                    initial={{ opacity: 0, x: 20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className={`p-4 border-b border-slate-50 hover:bg-slate-50/80 cursor-pointer transition-all ${
-                      !notification.read ? 'bg-blue-50/40' : ''
-                    }`}
-                  >
-                    <div className="flex gap-4">
-                      {getNotificationIcon(notification.type)}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 mb-0.5">
-                          <p className="font-semibold text-sm text-slate-900">
-                            {notification.title}
-                          </p>
-                          {!notification.read && (
-                            <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-1.5 shadow-[0_0_8px_rgba(37,99,235,0.6)]" />
-                          )}
+              {notificationsLoading && notifications.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-500">Loading notifications...</div>
+              ) : (
+                <AnimatePresence>
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-sm text-slate-500">No notifications yet.</div>
+                  ) : (
+                    notifications.map((notification, index) => (
+                      <motion.div
+                        key={notification.id}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`p-4 border-b border-slate-50 hover:bg-slate-50/80 cursor-pointer transition-all ${
+                          !notification.read ? 'bg-blue-50/40' : ''
+                        }`}
+                        onClick={() => {
+                          if (!notification.read && !notification.synthetic) {
+                            markRead(notification.id);
+                          }
+                        }}
+                      >
+                        <div className="flex gap-4">
+                          {getNotificationIcon(notification.type)}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2 mb-0.5">
+                              <p className="font-semibold text-sm text-slate-900">
+                                {notification.title}
+                              </p>
+                              {!notification.read && (
+                                <div className="w-2 h-2 rounded-full bg-blue-600 flex-shrink-0 mt-1.5 shadow-[0_0_8px_rgba(37,99,235,0.6)]" />
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-600 leading-relaxed mb-2">
+                              {notification.description}
+                            </p>
+                            <div className="flex items-center text-[10px] font-medium text-slate-400">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {formatDistanceToNow(new Date(notification.time || notification.createdAt), { addSuffix: true })}
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-xs text-slate-600 leading-relaxed mb-2">
-                          {notification.description}
-                        </p>
-                        <div className="flex items-center text-[10px] font-medium text-slate-400">
-                          <Clock className="w-3 h-3 mr-1" />
-                          {formatDistanceToNow(notification.time, { addSuffix: true })}
-                        </div>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+                      </motion.div>
+                    ))
+                  )}
+                </AnimatePresence>
+              )}
             </div>
 
-            <div className="p-3 bg-slate-50/50 border-t border-slate-100">
-              <Button variant="ghost" className="w-full text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 rounded-lg uppercase tracking-wider">
+            <div className="p-3 bg-slate-50/50 border-t border-slate-100 flex gap-2">
+              {unreadCount > 0 && (
+                <Button
+                  variant="ghost"
+                  className="flex-1 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg"
+                  onClick={() => markAllRead()}
+                >
+                  Mark all read
+                </Button>
+              )}
+              <Button variant="ghost" className="flex-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 rounded-lg uppercase tracking-wider">
                 View All Notifications
               </Button>
             </div>

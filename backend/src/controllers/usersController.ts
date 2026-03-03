@@ -1,8 +1,20 @@
 import { Response } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { pool } from '../db';
 import { AuthRequest } from '../middleware';
 import { UserResponse } from '../types';
+import { sendWelcomeEmail, sendProfileUpdatedEmail } from '../services/email';
+import { config } from '../config';
+
+const ALPHANUM = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+function generateRandomPassword(length = 12): string {
+  const bytes = crypto.randomBytes(length);
+  let s = '';
+  for (let i = 0; i < length; i++) s += ALPHANUM[bytes[i]! % ALPHANUM.length];
+  return s;
+}
 
 const VALID_ROLES = ['admin', 'manager', 'agent', 'customer'] as const;
 
@@ -97,26 +109,66 @@ export async function updateUser(req: AuthRequest, res: Response): Promise<void>
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  res.json(toUserResponse(row));
+  let zoneName: string | undefined;
+  let branchName: string | undefined;
+  if (row.zone_id) {
+    const z = await pool.query('SELECT name FROM zones WHERE id = $1', [row.zone_id]);
+    zoneName = z.rows[0]?.name;
+  }
+  if (row.branch_id) {
+    const b = await pool.query('SELECT name FROM branches WHERE id = $1', [row.branch_id]);
+    branchName = b.rows[0]?.name;
+  }
+  const emailResult = await sendProfileUpdatedEmail(row.email, {
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    status: row.status,
+    location: row.location ?? undefined,
+    zoneName,
+    branchName,
+  });
+  res.json({
+    ...toUserResponse(row),
+    emailSent: emailResult.sent,
+    emailError: !emailResult.sent ? emailResult.reason : undefined,
+  });
 }
 
 export async function createUser(req: AuthRequest, res: Response): Promise<void> {
-  const { name, email, password, role = 'agent', zone, branch, location, status = 'active' } = req.body;
-  if (!name || !email || !password) {
-    res.status(400).json({ message: 'Name, email and password are required' });
+  if (!req.user?.userId) {
+    res.status(401).json({ message: 'Unauthorized' });
     return;
   }
+  const { name, email, password: providedPassword, role = 'agent', zone, branch, location, status = 'active' } = req.body;
+  if (!name || !email) {
+    res.status(400).json({ message: 'Name and email are required' });
+    return;
+  }
+  const creatorId = req.user.userId;
+  const plainPassword = providedPassword && String(providedPassword).trim().length >= 6
+    ? String(providedPassword).trim()
+    : generateRandomPassword(12);
   const roleVal = toEnumRole(role);
-  const hash = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(plainPassword, 10);
+  const emailNorm = email.trim().toLowerCase();
   try {
     const r = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, zone_id, branch_id, location, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO users (name, email, password_hash, role, zone_id, branch_id, location, status, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status`,
-      [name.trim(), email.trim().toLowerCase(), hash, roleVal, zone || null, branch || null, location || null, status]
+      [name.trim(), emailNorm, hash, roleVal, zone || null, branch || null, location || null, status, creatorId]
     );
     const row = r.rows[0];
-    res.status(201).json(toUserResponse(row));
+    const emailResult = await sendWelcomeEmail(emailNorm, name.trim(), plainPassword);
+    if (!emailResult.sent && config.nodeEnv === 'development') {
+      console.log('[dev] Welcome email not sent. Temporary password for', emailNorm, ':', plainPassword, '| Reason:', emailResult.reason);
+    }
+    res.status(201).json({
+      ...toUserResponse(row),
+      emailSent: emailResult.sent,
+      emailError: !emailResult.sent ? emailResult.reason : undefined,
+    });
   } catch (err: any) {
     if (err.code === '23505') {
       res.status(400).json({ message: 'A user with this email already exists' });
@@ -124,6 +176,63 @@ export async function createUser(req: AuthRequest, res: Response): Promise<void>
     }
     throw err;
   }
+}
+
+/** Update current user's own profile (name, location, zone, branch, notification prefs). */
+export async function updateMyProfile(req: AuthRequest, res: Response): Promise<void> {
+  const userId = req.user!.userId;
+  const { name, location, zone, branch, emailAlerts, slaWarnings, desktopPush } = req.body;
+  const updates: string[] = [];
+  const values: any[] = [];
+  let i = 1;
+  if (name !== undefined) {
+    updates.push(`name = $${i++}`);
+    values.push(name);
+  }
+  if (location !== undefined) {
+    updates.push(`location = $${i++}`);
+    values.push(location);
+  }
+  if (zone !== undefined) {
+    updates.push(`zone_id = $${i++}`);
+    values.push(zone || null);
+  }
+  if (branch !== undefined) {
+    updates.push(`branch_id = $${i++}`);
+    values.push(branch || null);
+  }
+  if (emailAlerts !== undefined) {
+    updates.push(`email_alerts = $${i++}`);
+    values.push(!!emailAlerts);
+  }
+  if (slaWarnings !== undefined) {
+    updates.push(`sla_warnings = $${i++}`);
+    values.push(!!slaWarnings);
+  }
+  if (desktopPush !== undefined) {
+    updates.push(`desktop_push = $${i++}`);
+    values.push(!!desktopPush);
+  }
+  if (updates.length === 0) {
+    res.status(400).json({ error: 'No fields to update' });
+    return;
+  }
+  values.push(userId);
+  const r = await pool.query(
+    `UPDATE users SET ${updates.join(', ')} WHERE id = $${i}
+     RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status, email_alerts, sla_warnings, desktop_push`,
+    values
+  );
+  const row = r.rows[0];
+  if (!row) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  const out: any = toUserResponse(row);
+  out.emailAlerts = row.email_alerts !== undefined ? !!row.email_alerts : true;
+  out.slaWarnings = row.sla_warnings !== undefined ? !!row.sla_warnings : true;
+  out.desktopPush = !!row.desktop_push;
+  res.json(out);
 }
 
 export async function deleteUser(req: AuthRequest, res: Response): Promise<void> {

@@ -1,7 +1,9 @@
 import { Router } from 'express';
 import * as ticketsController from '../controllers/ticketsController';
 import * as commentsController from '../controllers/commentsController';
+import * as attachmentsController from '../controllers/attachmentsController';
 import { authMiddleware } from '../middleware';
+import { uploadAttachment } from '../middleware/upload';
 
 const router = Router();
 router.use(authMiddleware);
@@ -14,4 +16,7 @@ router.get('/:id/comments', commentsController.listComments);
 router.post('/:id/comments', commentsController.createComment);
 router.patch('/:id/comments/:cid', commentsController.updateComment);
 router.delete('/:id/comments/:cid', commentsController.deleteComment);
+router.get('/:id/attachments', attachmentsController.listAttachments);
+router.post('/:id/attachments', uploadAttachment, attachmentsController.uploadAttachment);
+router.delete('/:id/attachments/:attachmentId', attachmentsController.deleteAttachment);
 export default router;

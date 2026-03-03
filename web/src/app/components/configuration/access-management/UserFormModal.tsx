@@ -122,18 +122,9 @@ export function UserFormModal({
               />
             </div>
             {!editingUser && (
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="Minimum 6 characters"
-                  required={!editingUser}
-                  className="bg-white"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                />
-              </div>
+              <p className="text-sm text-slate-500">
+                A random password will be generated and sent to the user&apos;s email. They can sign in with that password.
+              </p>
             )}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">

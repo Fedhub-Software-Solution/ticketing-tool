@@ -21,6 +21,8 @@ export interface CreateTicketBody {
   location?: string;
   branch?: string;
   branchCode?: string;
+  /** User id of the requester (person the ticket is for); used for notification email */
+  requesterId?: string;
   assignedToId?: string;
   slaId?: string;
   slaDueDate?: string;
@@ -52,6 +54,15 @@ export interface TicketComment {
   updatedAt: string;
 }
 
+export interface TicketAttachment {
+  id: string;
+  ticketId: string;
+  fileName: string;
+  fileSize: number | null;
+  fileType: string | null;
+  uploadedAt: string;
+}
+
 export const ticketsApi = baseApi.injectEndpoints({
   endpoints: (build) => ({
     getTickets: build.query<Ticket[], TicketListParams | void>({
@@ -65,11 +76,11 @@ export const ticketsApi = baseApi.injectEndpoints({
       query: (id) => `tickets/${id}`,
       providesTags: (_result, _err, id) => [{ type: 'Ticket', id }],
     }),
-    createTicket: build.mutation<Ticket, CreateTicketBody>({
+    createTicket: build.mutation<Ticket & { emailSent?: boolean; emailError?: string }, CreateTicketBody>({
       query: (body) => ({ url: 'tickets', method: 'POST', body }),
       invalidatesTags: [{ type: 'Tickets', id: 'LIST' }],
     }),
-    updateTicket: build.mutation<Ticket, UpdateTicketArg>({
+    updateTicket: build.mutation<Ticket & { emailSent?: boolean; emailError?: string }, UpdateTicketArg>({
       query: ({ id, body }) => ({ url: `tickets/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _err, { id }) => [{ type: 'Ticket', id }, { type: 'Tickets', id: 'LIST' }],
     }),
@@ -97,6 +108,22 @@ export const ticketsApi = baseApi.injectEndpoints({
       query: ({ ticketId, commentId }) => ({ url: `tickets/${ticketId}/comments/${commentId}`, method: 'DELETE' }),
       invalidatesTags: (_result, _err, { ticketId }) => [{ type: 'Comments', id: ticketId }, { type: 'Ticket', id: ticketId }],
     }),
+    getAttachments: build.query<TicketAttachment[], string>({
+      query: (ticketId) => `tickets/${ticketId}/attachments`,
+      providesTags: (_result, _err, ticketId) => [{ type: 'Ticket', id: ticketId }],
+    }),
+    uploadAttachment: build.mutation<TicketAttachment, { ticketId: string; file: File }>({
+      query: ({ ticketId, file }) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        return { url: `tickets/${ticketId}/attachments`, method: 'POST', body: formData };
+      },
+      invalidatesTags: (_result, _err, { ticketId }) => [{ type: 'Ticket', id: ticketId }, { type: 'Tickets', id: 'LIST' }],
+    }),
+    deleteAttachment: build.mutation<void, { ticketId: string; attachmentId: string }>({
+      query: ({ ticketId, attachmentId }) => ({ url: `tickets/${ticketId}/attachments/${attachmentId}`, method: 'DELETE' }),
+      invalidatesTags: (_result, _err, { ticketId }) => [{ type: 'Ticket', id: ticketId }, { type: 'Tickets', id: 'LIST' }],
+    }),
   }),
 });
 
@@ -110,4 +137,7 @@ export const {
   useAddCommentMutation,
   useUpdateCommentMutation,
   useDeleteCommentMutation,
+  useGetAttachmentsQuery,
+  useUploadAttachmentMutation,
+  useDeleteAttachmentMutation,
 } = ticketsApi;

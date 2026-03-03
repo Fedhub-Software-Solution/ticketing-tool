@@ -105,7 +105,7 @@ export function SystemUsersTab({ isActive }: SystemUsersTabProps) {
     const name = `${formData.firstName} ${formData.lastName}`.trim();
     try {
       if (editingUser) {
-        await updateUserMutation({
+        const updateResult = await updateUserMutation({
           id: editingUser.id,
           body: {
             name,
@@ -116,23 +116,34 @@ export function SystemUsersTab({ isActive }: SystemUsersTabProps) {
             status: formData.status,
           },
         }).unwrap();
-        toast.success('User updated successfully', { description: `Changes to ${name} have been saved.` });
-      } else {
-        if (!formData.password.trim()) {
-          toast.error('Password is required for new users');
-          return;
+        if (updateResult.emailSent) {
+          toast.success('User updated successfully', {
+            description: `Changes to ${name} have been saved. A notification email with the updated profile has been sent to their email.`,
+          });
+        } else {
+          toast.success('User updated successfully', {
+            description: `Changes to ${name} have been saved.${updateResult.emailError ? ` Notification email could not be sent (${updateResult.emailError}).` : ''}`,
+          });
         }
-        await createUserMutation({
+      } else {
+        const result = await createUserMutation({
           name,
           email: formData.email.trim(),
-          password: formData.password,
           role: formData.role,
           zone: formData.zone || undefined,
           branch: formData.branch || undefined,
           location: formData.location || undefined,
           status: formData.status,
         }).unwrap();
-        toast.success('User created successfully', { description: `${name} has been added.` });
+        if (result.emailSent) {
+          toast.success('User created successfully', {
+            description: `${name} has been added. A welcome email with login details has been sent to their email.`,
+          });
+        } else {
+          toast.success('User created', {
+            description: `${name} has been added. Welcome email could not be sent. ${result.emailError || 'Configure SMTP in backend .env (SMTP_HOST, SMTP_USER, SMTP_PASS) to send welcome emails.'} User can still sign in; ask an admin for the temporary password or use password reset.`,
+          });
+        }
       }
       setIsAddUserOpen(false);
       setEditingUser(null);
@@ -190,14 +201,18 @@ export function SystemUsersTab({ isActive }: SystemUsersTabProps) {
         </Button>
       </div>
 
-      <MaterialReactTableWrapper<User>
-        columns={userColumns}
-        data={filteredUsers}
-        isLoading={usersLoading}
-        enableTopToolbar={false}
-        enableRowActions
-        positionActionsColumn="last"
-        renderRowActions={({ row }) => (
+      <div className="min-h-0 flex flex-col overflow-auto flex-1">
+        <MaterialReactTableWrapper<User>
+          columns={userColumns}
+          data={filteredUsers}
+          isLoading={usersLoading}
+          enableTopToolbar={false}
+          enableBottomToolbar={true}
+          enableRowActions
+          positionActionsColumn="last"
+          pageSize={5}
+          maxHeight="320px"
+          renderRowActions={({ row }) => (
           <div className="flex items-center justify-end gap-1">
             <Button
               variant="ghost"
@@ -217,7 +232,8 @@ export function SystemUsersTab({ isActive }: SystemUsersTabProps) {
             </Button>
           </div>
         )}
-      />
+        />
+      </div>
 
       <UserFormModal
         open={isAddUserOpen}

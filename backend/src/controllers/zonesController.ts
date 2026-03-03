@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { pool } from '../db';
 import { AuthRequest } from '../middleware';
+import { sendZoneNotificationEmail } from '../services/email';
 
 function toZone(row: any) {
   return {
@@ -27,7 +28,15 @@ export async function createZone(req: AuthRequest, res: Response): Promise<void>
     'INSERT INTO zones (name, code, manager, is_active) VALUES ($1, $2, $3, $4) RETURNING *',
     [name, code || null, manager || null, isActive !== false]
   );
-  res.status(201).json(toZone(r.rows[0]));
+  const row = r.rows[0];
+  if (manager) {
+    const userRow = await pool.query('SELECT name, email FROM users WHERE id = $1', [manager]);
+    const u = userRow.rows[0];
+    if (u?.email) {
+      await sendZoneNotificationEmail(u.email, u.name || 'Manager', name, code, 'created');
+    }
+  }
+  res.status(201).json(toZone(row));
 }
 
 export async function updateZone(req: AuthRequest, res: Response): Promise<void> {
@@ -41,6 +50,14 @@ export async function updateZone(req: AuthRequest, res: Response): Promise<void>
   if (!row) {
     res.status(404).json({ error: 'Zone not found' });
     return;
+  }
+  const managerId = row.manager;
+  if (managerId) {
+    const userRow = await pool.query('SELECT name, email FROM users WHERE id = $1', [managerId]);
+    const u = userRow.rows[0];
+    if (u?.email) {
+      await sendZoneNotificationEmail(u.email, u.name || 'Manager', row.name, row.code ?? undefined, 'updated');
+    }
   }
   res.json(toZone(row));
 }

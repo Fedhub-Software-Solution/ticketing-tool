@@ -38,8 +38,8 @@ export function useTickets(params?: { status?: string; priority?: string; zone?:
     }).unwrap();
   };
 
-  const addTicket = async (ticket: Ticket) => {
-    await createTicketMutation({
+  const addTicket = async (ticket: Ticket): Promise<Ticket> => {
+    return await createTicketMutation({
       title: ticket.title,
       description: ticket.description,
       status: ticket.status,
@@ -50,6 +50,7 @@ export function useTickets(params?: { status?: string; priority?: string; zone?:
       location: ticket.location,
       branch: ticket.branch,
       branchCode: ticket.branchCode,
+      requesterId: (ticket as any).requesterId,
       assignedToId: (ticket as any).assignedToId,
       slaId: ticket.slaId,
       slaDueDate: ticket.slaDueDate,

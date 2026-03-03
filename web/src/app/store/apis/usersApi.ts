@@ -4,7 +4,8 @@ import type { User } from '@/app/types';
 export type CreateUserBody = {
   name: string;
   email: string;
-  password: string;
+  /** Omit to have backend generate a random password and send it via welcome email */
+  password?: string;
   role?: string;
   zone?: string;
   branch?: string;
@@ -23,11 +24,11 @@ export const usersApi = baseApi.injectEndpoints({
       query: (id) => `users/${id}`,
       providesTags: (_result, _err, id) => [{ type: 'User', id }],
     }),
-    createUser: build.mutation<User, CreateUserBody>({
+    createUser: build.mutation<User & { emailSent?: boolean; emailError?: string }, CreateUserBody>({
       query: (body) => ({ url: 'users', method: 'POST', body }),
       invalidatesTags: [{ type: 'User', id: 'LIST' }],
     }),
-    updateUser: build.mutation<User, { id: string; body: Partial<Pick<User, 'name' | 'role' | 'zone' | 'branch' | 'location' | 'status'>> }>({
+    updateUser: build.mutation<User & { emailSent?: boolean; emailError?: string }, { id: string; body: Partial<Pick<User, 'name' | 'role' | 'zone' | 'branch' | 'location' | 'status'>> }>({
       query: ({ id, body }) => ({ url: `users/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _err, { id }) => [{ type: 'User', id }, { type: 'User', id: 'LIST' }],
     }),
@@ -35,7 +36,14 @@ export const usersApi = baseApi.injectEndpoints({
       query: (id) => ({ url: `users/${id}`, method: 'DELETE' }),
       invalidatesTags: (_result, _err, id) => [{ type: 'User', id }, { type: 'User', id: 'LIST' }],
     }),
+    updateMyProfile: build.mutation<
+      User,
+      Partial<Pick<User, 'name' | 'location' | 'zone' | 'branch' | 'emailAlerts' | 'slaWarnings' | 'desktopPush'>>
+    >({
+      query: (body) => ({ url: 'users/me', method: 'PATCH', body }),
+      invalidatesTags: ['User'],
+    }),
   }),
 });
 
-export const { useGetUsersQuery, useGetUserQuery, useCreateUserMutation, useUpdateUserMutation, useDeleteUserMutation } = usersApi;
+export const { useGetUsersQuery, useGetUserQuery, useCreateUserMutation, useUpdateUserMutation, useDeleteUserMutation, useUpdateMyProfileMutation } = usersApi;

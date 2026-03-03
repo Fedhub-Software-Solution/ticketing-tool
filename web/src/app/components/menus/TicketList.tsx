@@ -1,12 +1,12 @@
 import { useState, useMemo } from 'react';
-import { Search, Plus, Filter, Clock, User, Tag, ChevronDown, Building2, UserCircle, Download, List, Table, MapPin, ArrowUpDown, ChevronUp, Edit2, Trash2, Globe, GitBranch } from 'lucide-react';
+import type { MRT_Row } from 'material-react-table';
+import { Search, Filter, List, Table, MapPin, Edit2, Trash2, Globe, Tag, User, GitBranch, Clock } from 'lucide-react';
 import { Card } from '../common/ui/card';
 import { Button } from '../common/ui/button';
 import { Badge } from '../common/ui/badge';
 import { Input } from '../common/ui/input';
 import { useGetCategoriesQuery } from '@/app/store/apis/categoriesApi';
-import { formatDistanceToNow, format } from 'date-fns';
-import { motion } from 'motion/react';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Select,
   SelectContent,
@@ -14,17 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../common/ui/select';
-import {
-  Table as TableComponent,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../common/ui/table';
 import { toast } from 'sonner';
 import { User as UserType, Ticket } from '@/app/types';
 import { useTickets } from '@/app/hooks/useTickets';
+import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
+import { MaterialReactTableCardListWrapper } from '@/app/components/common/mrt/MaterialReactTableCardListWrapper';
+import { getTicketTableColumns } from './ticketTableColumns';
 
 interface TicketListProps {
   onViewTicket: (ticketId: string, edit?: boolean) => void;
@@ -41,8 +36,22 @@ type ViewMode = 'list' | 'table';
 type SortField = keyof Ticket;
 type SortDirection = 'asc' | 'desc';
 
+const priorityColors: Record<string, string> = {
+  urgent: 'bg-rose-50 text-rose-700 border-rose-100 font-semibold',
+  high: 'bg-orange-50 text-orange-700 border-orange-100 font-semibold',
+  medium: 'bg-amber-50 text-amber-700 border-amber-100 font-semibold',
+  low: 'bg-blue-50 text-blue-700 border-blue-100 font-semibold',
+};
+
+const statusColors: Record<string, string> = {
+  open: 'bg-indigo-50 text-indigo-700 border-indigo-100 font-medium',
+  'in-progress': 'bg-violet-50 text-violet-700 border-violet-100 font-medium',
+  resolved: 'bg-emerald-50 text-emerald-700 border-emerald-100 font-medium',
+  closed: 'bg-slate-50 text-slate-600 border-slate-200 font-medium',
+};
+
 export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUser, initialViewMode, onViewModeChange, listViewMode, setListViewMode }: TicketListProps) {
-  const { tickets, deleteTicket } = useTickets();
+  const { tickets, deleteTicket, isLoading, isError } = useTickets();
   const { data: categories = [] } = useGetCategoriesQuery();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -50,10 +59,8 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [zoneFilter, setZoneFilter] = useState<string>('all');
   const [showOnlyAssigned, setShowOnlyAssigned] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
   const [sortField, setSortField] = useState<SortField>('updatedAt');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-  const itemsPerPage = 10;
 
   // Use controlled viewMode from parent if available, otherwise use local state
   const viewMode = listViewMode !== undefined ? listViewMode : (initialViewMode || 'table');
@@ -79,7 +86,11 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
   const getAccessibleTickets = () => {
     if (currentUser.role === 'admin') return tickets;
     if (currentUser.role === 'customer') return tickets.filter(ticket => ticket.createdBy === currentUser.name);
-    if (currentUser.zone) return tickets.filter(ticket => ticket.zone === currentUser.zone);
+    if (currentUser.zone) {
+      return tickets.filter(
+        ticket => ticket.zone === currentUser.zone || ticket.createdBy === currentUser.name
+      );
+    }
     return tickets;
   };
 
@@ -115,10 +126,6 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
     return result;
   }, [accessibleTickets, searchQuery, statusFilter, priorityFilter, categoryFilter, zoneFilter, showOnlyAssigned, sortField, sortDirection, currentUser.name]);
 
-  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedTickets = filteredTickets.slice(startIndex, startIndex + itemsPerPage);
-
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -126,25 +133,6 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
       setSortField(field);
       setSortDirection('asc');
     }
-  };
-
-  const getSortIcon = (field: SortField) => {
-    if (sortField !== field) return <ArrowUpDown className="w-3.5 h-3.5 opacity-30" />;
-    return sortDirection === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-blue-600" /> : <ChevronDown className="w-3.5 h-3.5 text-blue-600" />;
-  };
-
-  const priorityColors = {
-    urgent: 'bg-rose-50 text-rose-700 border-rose-100 font-semibold',
-    high: 'bg-orange-50 text-orange-700 border-orange-100 font-semibold',
-    medium: 'bg-amber-50 text-amber-700 border-amber-100 font-semibold',
-    low: 'bg-blue-50 text-blue-700 border-blue-100 font-semibold',
-  };
-
-  const statusColors = {
-    open: 'bg-indigo-50 text-indigo-700 border-indigo-100 font-medium',
-    'in-progress': 'bg-violet-50 text-violet-700 border-violet-100 font-medium',
-    resolved: 'bg-emerald-50 text-emerald-700 border-emerald-100 font-medium',
-    closed: 'bg-slate-50 text-slate-600 border-slate-200 font-medium',
   };
 
   const handleExport = () => {
@@ -245,170 +233,102 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
 
       <div className="flex-1 overflow-y-auto p-8">
         {viewMode === 'list' ? (
-          <div className="space-y-3">
-            {paginatedTickets.map((ticket, index) => (
-              <motion.div key={ticket.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
-                <Card className="p-5 border-slate-200 hover:shadow-md transition-all">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
-                        <span className="font-mono text-slate-500">{ticket.id}</span>
-                        <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
-                        <Badge className={statusColors[ticket.status]}>{ticket.status.replace('-', ' ')}</Badge>
-                        <Badge variant="outline">{ticket.category}</Badge>
-                        {ticket.subCategory && <Badge variant="outline" className="bg-slate-50 border-slate-200">{ticket.subCategory}</Badge>}
-                        <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 flex items-center gap-1">
-                          <Globe className="w-3 h-3" /> {ticket.zone}
-                        </Badge>
-                        <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-100 flex items-center gap-1">
-                          <GitBranch className="w-3 h-3" /> {ticket.branch}
-                        </Badge>
-                      </div>
-                      <h3 className="font-bold text-slate-900 mb-1">{ticket.title}</h3>
-                      <p className="text-sm text-slate-500 line-clamp-1">{ticket.description}</p>
-                      <div className="flex items-center gap-4 mt-4 text-[10px] text-slate-400 font-medium">
-                        <span className="flex items-center gap-1"><User className="w-3 h-3" /> {ticket.assignedTo}</span>
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}</span>
-                      </div>
-                    </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => onViewTicket(ticket.id, true)}><Edit2 className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="icon" onClick={() => onTrackTicket(ticket.id)}><MapPin className="w-4 h-4" /></Button>
-                      <Button variant="ghost" size="icon" className="hover:text-rose-600 hover:bg-rose-50" onClick={(e) => handleDeleteTicket(ticket.id, e)}><Trash2 className="w-4 h-4" /></Button>
-                    </div>
+          <Card className="overflow-hidden border-slate-200 shadow-sm rounded-xl">
+            <MaterialReactTableCardListWrapper<Ticket>
+              data={filteredTickets}
+              isLoading={isLoading}
+              error={isError ? new Error('Failed to load tickets') : null}
+              pageSize={10}
+              maxHeight="calc(100vh - 280px)"
+              getRowId={(row) => row.id}
+              emptyMessage={
+                tickets.length === 0 && !searchQuery && statusFilter === 'all' && priorityFilter === 'all' && categoryFilter === 'all' && zoneFilter === 'all'
+                  ? 'No tickets yet. Create one with + New Ticket.'
+                  : 'No tickets match your filters. Try adjusting search or filters.'
+              }
+              errorMessage="Failed to load tickets. Check that the API is running and you are logged in."
+              renderCardContent={(ticket) => (
+                <>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
+                    <span className="font-mono text-slate-500">{ticket.id}</span>
+                    <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
+                    <Badge className={statusColors[ticket.status]}>{ticket.status.replace('-', ' ')}</Badge>
+                    <Badge variant="outline">{ticket.category}</Badge>
+                    {ticket.subCategory && <Badge variant="outline" className="bg-slate-50 border-slate-200">{ticket.subCategory}</Badge>}
+                    <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 flex items-center gap-1">
+                      <Globe className="w-3 h-3" /> {ticket.zone}
+                    </Badge>
+                    <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-100 flex items-center gap-1">
+                      <GitBranch className="w-3 h-3" /> {ticket.branch}
+                    </Badge>
                   </div>
-                </Card>
-              </motion.div>
-            ))}
-          </div>
+                  <h3 className="font-bold text-slate-900 mb-1">{ticket.title}</h3>
+                  <p className="text-sm text-slate-500 line-clamp-1">{ticket.description}</p>
+                  <div className="flex items-center gap-4 mt-4 text-[10px] text-slate-400 font-medium">
+                    <span className="flex items-center gap-1"><User className="w-3 h-3" /> {ticket.assignedTo}</span>
+                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}</span>
+                  </div>
+                </>
+              )}
+              renderRowActions={({ row }) => (
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" onClick={() => onViewTicket(row.original.id, true)}><Edit2 className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" onClick={() => onTrackTicket(row.original.id)}><MapPin className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="icon" className="hover:text-rose-600 hover:bg-rose-50" onClick={(e) => handleDeleteTicket(row.original.id, e)}><Trash2 className="w-4 h-4" /></Button>
+                </div>
+              )}
+            />
+          </Card>
         ) : (
           <Card className="overflow-hidden border-slate-200 shadow-sm rounded-xl">
-            <TableComponent>
-              <TableHeader className="bg-slate-50/80">
-                <TableRow>
-                  <TableHead onClick={() => handleSort('id')} className="cursor-pointer py-4 pl-6 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      ID {getSortIcon('id')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('title')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Title {getSortIcon('title')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('zone')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Zone {getSortIcon('zone')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('status')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center justify-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Status {getSortIcon('status')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('priority')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center justify-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Priority {getSortIcon('priority')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('assignedTo')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Assigned {getSortIcon('assignedTo')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('category')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Category {getSortIcon('category')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('subCategory')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Sub Category {getSortIcon('subCategory')}
-                    </div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort('updatedAt')} className="cursor-pointer py-4 group">
-                    <div className="flex items-center gap-1.5 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                      Updated Date {getSortIcon('updatedAt')}
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right py-4 pr-6 font-bold text-slate-500 uppercase text-[11px] tracking-wider">
-                    Actions
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedTickets.map((ticket, index) => (
-                  <TableRow key={ticket.id} className="group hover:bg-blue-50/40 transition-all duration-200">
-                    <TableCell className="pl-6">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-1 h-6 rounded-full ${ticket.priority === 'urgent' ? 'bg-rose-500' : ticket.priority === 'high' ? 'bg-orange-500' : 'bg-transparent'}`} />
-                        <span className="font-mono text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/50">#{ticket.id}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="max-w-[200px]">
-                      <div className="flex flex-col">
-                        <p className="font-semibold text-slate-900 line-clamp-1">{ticket.title}</p>
-                        <p className="text-[10px] text-slate-400 line-clamp-1 truncate">{ticket.description}</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 w-fit uppercase"><Globe className="w-2.5 h-2.5" /> {ticket.zone}</span>
-                        <span className="flex items-center gap-1 text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-100 w-fit ml-2 uppercase tracking-tight"><GitBranch className="w-2.5 h-2.5" /> {ticket.branch}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge className={`${statusColors[ticket.status]} rounded-full border px-2.5 py-0.5 shadow-sm text-[10px] capitalize inline-flex items-center gap-1.5`}>
-                        <div className={`w-1.5 h-1.5 rounded-full ${ticket.status === 'open' ? 'bg-indigo-500 animate-pulse' : ticket.status === 'in-progress' ? 'bg-violet-500' : ticket.status === 'resolved' ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-                        {ticket.status.replace('-', ' ')}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge className={`${priorityColors[ticket.priority]} rounded-lg border px-2.5 py-0.5 shadow-sm text-[10px] capitalize`}>
-                        {ticket.priority}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-600 border border-slate-200">
-                          {ticket.assignedTo.charAt(0)}
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">{ticket.assignedTo}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs font-semibold text-slate-600 bg-slate-100/50 px-2 py-1 rounded border border-slate-200/50">{ticket.category}</span>
-                    </TableCell>
-                    <TableCell>
-                      <span className="text-xs text-slate-500 italic px-2 py-1 bg-slate-50/50 rounded border border-slate-200/30">{ticket.subCategory || '—'}</span>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-slate-600">{format(new Date(ticket.updatedAt), 'dd/MM/yyyy')}</span>
-                        <span className="text-[10px] text-slate-400">{format(new Date(ticket.updatedAt), 'HH:mm')}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right pr-6">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200" onClick={() => onViewTicket(ticket.id, true)}><Edit2 className="w-3.5 h-3.5 text-slate-400" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200" onClick={() => onTrackTicket(ticket.id)}><MapPin className="w-3.5 h-3.5 text-slate-400" /></Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 hover:text-rose-600" onClick={(e) => handleDeleteTicket(ticket.id, e)}><Trash2 className="w-3.5 h-3.5 text-slate-400" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </TableComponent>
+            <MaterialReactTableWrapper<Ticket>
+              columns={getTicketTableColumns()}
+              data={filteredTickets}
+              isLoading={isLoading}
+              error={isError ? new Error('Failed to load tickets') : null}
+              enableTopToolbar={false}
+              enableRowActions
+              positionActionsColumn="last"
+              maxHeight="calc(100vh - 280px)"
+              pageSize={10}
+              emptyMessage={
+                tickets.length === 0 && !searchQuery && statusFilter === 'all' && priorityFilter === 'all' && categoryFilter === 'all' && zoneFilter === 'all'
+                  ? 'No tickets yet. Create one with + New Ticket.'
+                  : 'No tickets match your filters. Try adjusting search or filters.'
+              }
+              errorMessage="Failed to load tickets. Check that the API is running and you are logged in."
+              renderRowActions={({ row }: { row: MRT_Row<Ticket> }) => (
+                <div className="flex items-center justify-end gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200"
+                    onClick={() => onViewTicket(row.original.id, true)}
+                  >
+                    <Edit2 className="w-3.5 h-3.5 text-slate-400" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200"
+                    onClick={() => onTrackTicket(row.original.id)}
+                  >
+                    <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 hover:text-rose-600"
+                    onClick={(e) => handleDeleteTicket(row.original.id, e)}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-slate-400" />
+                  </Button>
+                </div>
+              )}
+            />
           </Card>
         )}
 
-        {totalPages > 1 && (
-          <div className="mt-8 flex items-center justify-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>Previous</Button>
-            <span className="text-sm text-slate-500 font-medium">Page {currentPage} of {totalPages}</span>
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>Next</Button>
-          </div>
-        )}
       </div>
     </div>
   );

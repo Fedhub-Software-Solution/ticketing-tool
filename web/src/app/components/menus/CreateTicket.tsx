@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { ChevronLeft, UserCircle, Tag, Info, AlertCircle, Link as LinkIcon, Layers, Paperclip, X, FileText, Send, Clock, Shield, MapPin, Search, Sparkles, FolderTree, ClipboardCheck, Settings2, MessageSquare, Globe, GitBranch, Pencil, Trash2, Check, Plus } from 'lucide-react';
 import { Card } from '../common/ui/card';
 import { Button } from '../common/ui/button';
@@ -16,9 +16,21 @@ import {
 import { toast } from 'sonner';
 import { User, Ticket } from '../../types';
 import { useTickets } from '@/app/hooks/useTickets';
-import { useGetTicketQuery } from '@/app/store/apis/ticketsApi';
+import {
+  useGetTicketQuery,
+  useGetAttachmentsQuery,
+  useGetCommentsQuery,
+  useUploadAttachmentMutation,
+  useDeleteAttachmentMutation,
+  useAddCommentMutation,
+  useUpdateCommentMutation,
+  useDeleteCommentMutation,
+} from '@/app/store/apis/ticketsApi';
 import { useGetCategoriesQuery } from '@/app/store/apis/categoriesApi';
 import { useGetUsersQuery } from '@/app/store/apis/usersApi';
+import { useGetZonesQuery } from '@/app/store/apis/zonesApi';
+import { useGetBranchesQuery } from '@/app/store/apis/branchesApi';
+import { useGetEscalationRulesQuery } from '@/app/store/apis/escalationRulesApi';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CreateTicketProps {
@@ -37,106 +49,171 @@ interface Comment {
   isCurrentUser: boolean;
 }
 
-const locations = ['Chennai', 'Bangalore', 'Mumbai', 'Hyderabad', 'Delhi', 'Pune'];
-
-const zoneBranches: Record<string, { name: string, code: string }[]> = {
-  'Chennai': [
-    { name: 'Adyar Branch', code: 'CHN-001' },
-    { name: 'T Nagar Branch', code: 'CHN-002' },
-    { name: 'Velachery Branch', code: 'CHN-003' },
-  ],
-  'Bangalore': [
-    { name: 'Indiranagar Branch', code: 'BLR-001' },
-    { name: 'Koramangala Branch', code: 'BLR-002' },
-    { name: 'Whitefield Branch', code: 'BLR-003' },
-  ],
-  'Mumbai': [
-    { name: 'Andheri Branch', code: 'MUM-001' },
-    { name: 'Bandra Branch', code: 'MUM-002' },
-    { name: 'Colaba Branch', code: 'MUM-003' },
-  ],
-  'Hyderabad': [
-    { name: 'Gachibowli Branch', code: 'HYD-001' },
-    { name: 'Banjara Hills Branch', code: 'HYD-002' },
-    { name: 'Jubilee Hills Branch', code: 'HYD-003' },
-  ],
-  'Delhi': [
-    { name: 'Connaught Place Branch', code: 'DEL-001' },
-    { name: 'Hauz Khas Branch', code: 'DEL-002' },
-    { name: 'Saket Branch', code: 'DEL-003' },
-  ],
-  'Pune': [
-    { name: 'Kothrud Branch', code: 'PUN-001' },
-    { name: 'Hinjewadi Branch', code: 'PUN-002' },
-    { name: 'Viman Nagar Branch', code: 'PUN-003' },
-  ],
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Low Priority',
+  medium: 'Medium Priority',
+  high: 'High Priority',
+  urgent: 'Urgent Response',
 };
 
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function formatCommentTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffM = Math.floor(diffMs / 60000);
+  if (diffM < 1) return 'Just now';
+  if (diffM < 60) return `${diffM} min ago`;
+  const diffH = Math.floor(diffM / 60);
+  if (diffH < 24) return `${diffH} hr ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD === 1) return 'Yesterday';
+  if (diffD < 7) return `${diffD} days ago`;
+  return d.toLocaleDateString();
+}
+
 export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket: ticketProp }: CreateTicketProps) {
-  const { tickets, addTicket, updateTicket } = useTickets();
+  const { addTicket, updateTicket, refetch: refetchTickets } = useTickets();
+  const [uploadAttachment] = useUploadAttachmentMutation();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const syncedTicketIdRef = useRef<string | null>(null);
   const { data: ticketFromApi } = useGetTicketQuery(ticketId!, { skip: !ticketId });
+  const ticket = ticketProp ?? ticketFromApi;
+  const effectiveTicketId = ticketId ?? ticket?.id;
+  const isEditing = !!ticket;
+  const { data: existingAttachments = [] } = useGetAttachmentsQuery(effectiveTicketId ?? '', { skip: !effectiveTicketId });
+  const [deleteAttachment] = useDeleteAttachmentMutation();
+  const { data: apiComments = [] } = useGetCommentsQuery(effectiveTicketId ?? '', { skip: !effectiveTicketId });
+  const [addCommentMutation] = useAddCommentMutation();
+  const [updateCommentMutation] = useUpdateCommentMutation();
+  const [deleteCommentMutation] = useDeleteCommentMutation();
   const { data: categories = [] } = useGetCategoriesQuery();
   const { data: users = [] } = useGetUsersQuery(undefined, { skip: currentUser.role === 'customer' });
-  const ticket = ticketProp ?? ticketFromApi;
-  const isEditing = !!ticket;
+  const { data: zones = [] } = useGetZonesQuery();
+  const { data: branches = [] } = useGetBranchesQuery();
+  const { data: escalationRules = [] } = useGetEscalationRulesQuery();
 
-  const [selectedLocation, setSelectedLocation] = useState<string>(ticket?.location || currentUser.location || 'Chennai');
   const [selectedBranch, setSelectedBranch] = useState<string>(ticket?.branch || '');
   const [selectedCategory, setSelectedCategory] = useState<string>(
     ticket ? (categories.find((c: { name: string; id: string }) => c.name === ticket.category)?.id || categories[0]?.id || '') : (categories[0]?.id || '')
   );
-  const [selectedSubCategory, setSelectedSubCategory] = useState<string>(ticket?.subCategory || '');
+  const [selectedSubCategory, setSelectedSubCategory] = useState<string>(ticket?.subCategory || 'none');
   const [selectedRequestor, setSelectedRequestor] = useState<string>(ticket?.createdBy || currentUser.name);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedChildIds, setSelectedChildIds] = useState<string[]>(ticket?.childIds || []);
-  const [attachments, setAttachments] = useState<{ name: string, size: string, type: string }[]>([]);
+  const [attachments, setAttachments] = useState<{ file: File; id: string }[]>([]);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<Comment[]>([]);
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
-  
   const [statusValue, setStatusValue] = useState(ticket?.status || 'open');
   const [titleValue, setTitleValue] = useState(ticket?.title || '');
   const [descriptionValue, setDescriptionValue] = useState(ticket?.description || '');
   const [priorityValue, setPriorityValue] = useState(ticket?.priority || 'medium');
   const [assignedToValue, setAssignedToValue] = useState(ticket?.assignedTo || 'unassigned');
-  const [zoneValue, setZoneValue] = useState(ticket?.zone || currentUser.zone || 'South');
+  const [zoneValue, setZoneValue] = useState(ticket?.zone || currentUser.zone || '');
+
+  const parentCategories = useMemo(() => categories.filter((c: { parentId?: string }) => !c.parentId), [categories]);
+  const subCategories = useMemo(
+    () => categories.filter((c: { parentId?: string }) => c.parentId === selectedCategory),
+    [categories, selectedCategory]
+  );
+  const criticalityOptions = useMemo(() => {
+    const fromRules = [...new Set((escalationRules as { priority?: string }[]).map((r) => r.priority).filter(Boolean))];
+    const order = ['low', 'medium', 'high', 'urgent'];
+    const ordered = order.filter((p) => fromRules.includes(p));
+    return ordered.length ? ordered : order;
+  }, [escalationRules]);
+  const selectedZoneId = useMemo(() => (zones as { id: string; name: string }[]).find((z) => z.name === zoneValue)?.id ?? null, [zones, zoneValue]);
+  const branchesForZone = useMemo(
+    () => (branches as { id: string; name: string; zoneId: string; code?: string }[]).filter((b) => b.zoneId === selectedZoneId),
+    [branches, selectedZoneId]
+  );
+  const currentBranchCode = useMemo(
+    () => branchesForZone.find((b) => b.name === selectedBranch)?.code ?? '',
+    [branchesForZone, selectedBranch]
+  );
+  /** All users for Assigned Professional dropdown (show full list) */
+  const usersForAssignment = useMemo(() => users, [users]);
+
+  const displayComments = useMemo((): Comment[] => {
+    if (effectiveTicketId && apiComments.length >= 0) {
+      return apiComments.map((c: { id: string; author: string; authorId: string; text: string; createdAt: string }) => ({
+        id: c.id,
+        author: c.author,
+        text: c.text,
+        timestamp: formatCommentTime(c.createdAt),
+        isCurrentUser: c.authorId === currentUser.id,
+      }));
+    }
+    return comments;
+  }, [effectiveTicketId, apiComments, comments, currentUser.id]);
 
   useEffect(() => {
-    if (selectedLocation && zoneBranches[selectedLocation]) {
-      const branchesInLoc = zoneBranches[selectedLocation].map(b => b.name);
-      if (!branchesInLoc.includes(selectedBranch)) {
-        setSelectedBranch(zoneBranches[selectedLocation][0].name);
-      }
+    if (zones.length && !zoneValue) setZoneValue((zones as { name: string }[])[0]?.name ?? '');
+  }, [zones, zoneValue]);
+
+  useEffect(() => {
+    if (parentCategories.length && !selectedCategory) setSelectedCategory(parentCategories[0]?.id ?? '');
+  }, [parentCategories, selectedCategory]);
+
+  useEffect(() => {
+    const subNames = subCategories.map((c: { name: string }) => c.name);
+    if (selectedSubCategory && selectedSubCategory !== 'none' && !subNames.includes(selectedSubCategory)) setSelectedSubCategory(subNames[0] ?? 'none');
+  }, [selectedCategory, subCategories, selectedSubCategory]);
+
+  useEffect(() => {
+    const branchNames = branchesForZone.map((b) => b.name);
+    if (selectedBranch && !branchNames.includes(selectedBranch)) setSelectedBranch(branchNames[0] ?? '');
+  }, [zoneValue, branchesForZone, selectedBranch]);
+
+  useEffect(() => {
+    syncedTicketIdRef.current = null;
+  }, [ticketId]);
+
+  // Prepopulate all form fields when editing and ticket + lookups have loaded
+  useEffect(() => {
+    if (!ticket?.id || !isEditing) return;
+    if (syncedTicketIdRef.current === ticket.id) return;
+    setTitleValue(ticket.title);
+    setDescriptionValue(ticket.description || '');
+    setStatusValue(ticket.status);
+    setPriorityValue(ticket.priority);
+    setAssignedToValue(ticket.assignedTo || 'unassigned');
+    setSelectedRequestor(ticket.createdBy || currentUser.name);
+    setSelectedChildIds(ticket.childIds || []);
+    const cats = categories as { id: string; name: string; parentId?: string }[];
+    const zs = zones as { id: string; name: string }[];
+    if (cats.length) {
+      const catId = (ticket as Ticket & { categoryId?: string }).categoryId ?? cats.find((c) => c.name === ticket.category)?.id;
+      if (catId) setSelectedCategory(catId);
+      setSelectedSubCategory(ticket.subCategory || 'none');
     }
-  }, [selectedLocation]);
-
-  const currentBranchCode = useMemo(() => {
-    if (!selectedLocation || !selectedBranch) return '';
-    return zoneBranches[selectedLocation]?.find(b => b.name === selectedBranch)?.code || '';
-  }, [selectedLocation, selectedBranch]);
-
-  const filteredUsersForAssignment = useMemo(() => {
-    return users.filter((user: User) =>
-      (user.role === 'agent' || user.role === 'manager' || user.role === 'admin') &&
-      (user.location === selectedLocation || !user.location)
-    );
-  }, [users, selectedLocation]);
+    if (zs.length && ticket.zone) setZoneValue(ticket.zone);
+    if (ticket.branch) setSelectedBranch(ticket.branch);
+    syncedTicketIdRef.current = ticket.id;
+  }, [ticket, isEditing, categories, zones, currentUser.name]);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setIsSubmitting(true);
     
     try {
-      const ticketData: Partial<Ticket> = {
+      const ticketData: Partial<Ticket> & { categoryId?: string } = {
         title: titleValue,
         description: descriptionValue,
         status: statusValue as any,
         priority: priorityValue as any,
         category: categories.find((c: { id: string; name: string }) => c.id === selectedCategory)?.name || 'General',
-        subCategory: selectedSubCategory,
+        categoryId: selectedCategory || undefined,
+        subCategory: selectedSubCategory === 'none' ? undefined : selectedSubCategory,
         zone: zoneValue,
-        location: selectedLocation,
+        location: zoneValue,
         branch: selectedBranch,
         branchCode: currentBranchCode,
         assignedTo: assignedToValue === 'unassigned' ? 'Unassigned' : assignedToValue,
@@ -145,15 +222,16 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
         childIds: selectedChildIds.length > 0 ? selectedChildIds : undefined,
       };
 
-      await new Promise(resolve => setTimeout(resolve, 800));
-
+      let ticketIdToUse: string;
       if (isEditing && ticket) {
         await updateTicket(ticket.id, ticketData);
+        ticketIdToUse = ticket.id;
         toast.success('Ticket updated successfully!');
       } else {
         const categoryName = categories.find((c: { id: string; name: string }) => c.id === selectedCategory)?.name || 'General';
         const assigneeId = assignedToValue === 'unassigned' ? undefined : users.find((u: User) => u.name === assignedToValue)?.id;
-        await addTicket({
+        const requesterId = users.find((u: User) => u.name === selectedRequestor)?.id;
+        const created = await addTicket({
           ...ticketData,
           id: '',
           status: statusValue as Ticket['status'],
@@ -164,13 +242,42 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
           assignedTo: assignedToValue === 'unassigned' ? 'Unassigned' : assignedToValue,
           createdBy: selectedRequestor,
           categoryId: selectedCategory,
+          requesterId,
           assignedToId: assigneeId,
-        } as Ticket & { categoryId?: string; assignedToId?: string });
-        toast.success('Ticket created successfully!');
+        } as Ticket & { categoryId?: string; requesterId?: string; assignedToId?: string });
+        ticketIdToUse = created.id;
+        if ((created as any).emailSent) {
+          toast.success('Ticket created successfully!', {
+            description: 'Notification emails have been sent to the requester and assignee.',
+          });
+        } else if ((created as any).emailError) {
+          toast.success('Ticket created successfully!', {
+            description: `Notification emails could not be sent. ${(created as any).emailError}`,
+          });
+        } else {
+          toast.success('Ticket created successfully!');
+        }
       }
+      for (const { file } of attachments) {
+        try {
+          await uploadAttachment({ ticketId: ticketIdToUse, file }).unwrap();
+        } catch {
+          toast.error(`Failed to upload ${file.name}`);
+        }
+      }
+      await refetchTickets();
       onSuccess();
-    } catch (error) {
-      toast.error('Operation failed.');
+    } catch (error: any) {
+      const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api';
+      let message = 'Operation failed.';
+      if (error?.status === 'FETCH_ERROR' || (error?.message && /failed to fetch|network error|load failed/i.test(error.message))) {
+        message = `Cannot reach the API at ${apiUrl}. Start the backend with: cd backend && npm run dev`;
+      } else if (error?.data) {
+        message = error.data?.message ?? error.data?.error ?? (typeof error.data === 'string' ? error.data : message);
+      } else if (error?.message) {
+        message = error.message;
+      }
+      toast.error(message);
     } finally {
       setIsSubmitting(false);
     }
@@ -281,12 +388,12 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                           <Tag className="w-3.5 h-3.5 text-slate-400" />
                           Service Category
                         </Label>
-                        <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <Select value={selectedCategory} onValueChange={(v) => { setSelectedCategory(v); setSelectedSubCategory('none'); }}>
                           <SelectTrigger className="h-12 border-slate-200 bg-slate-50/30 focus:bg-white rounded-xl transition-all">
-                            <SelectValue />
+                            <SelectValue placeholder="Select category" />
                           </SelectTrigger>
                           <SelectContent className="rounded-xl border-slate-200">
-                            {categories.filter((c: { parentId?: string }) => !c.parentId).map((c: { id: string; name: string }) => (
+                            {parentCategories.map((c: { id: string; name: string }) => (
                               <SelectItem key={c.id} value={c.id} className="focus:bg-blue-50 focus:text-blue-700 py-2.5">
                                 {c.name}
                               </SelectItem>
@@ -305,7 +412,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                           </SelectTrigger>
                           <SelectContent className="rounded-xl border-slate-200">
                             <SelectItem value="none" className="py-2.5 italic text-slate-400">Not specified</SelectItem>
-                            {categories.filter((c: { parentId?: string }) => c.parentId === selectedCategory).map((c: { id: string; name: string }) => (
+                            {subCategories.map((c: { id: string; name: string }) => (
                               <SelectItem key={c.id} value={c.name} className="focus:bg-blue-50 focus:text-blue-700 py-2.5">
                                 {c.name}
                               </SelectItem>
@@ -331,16 +438,16 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       </div>
                       <h3 className="font-bold text-white text-base tracking-tight">Communication & History</h3>
                     </div>
-                    {comments.length > 0 && (
+                    {displayComments.length > 0 && (
                       <Badge variant="outline" className="bg-white/20 text-white font-bold px-2.5 py-0.5 rounded-full border-none backdrop-blur-sm">
-                        {comments.length} Internal Note{comments.length !== 1 ? 's' : ''}
+                        {displayComments.length} Internal Note{displayComments.length !== 1 ? 's' : ''}
                       </Badge>
                     )}
                   </div>
                   
                   <div className="p-8">
                     <div className="space-y-6 mb-8">
-                      {comments.length === 0 ? (
+                      {displayComments.length === 0 ? (
                         <div className="text-center py-12 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                           <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center mx-auto mb-3 shadow-sm">
                             <MessageSquare className="w-6 h-6 text-slate-300" />
@@ -350,7 +457,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                         </div>
                       ) : (
                         <div className="space-y-5 max-h-[400px] overflow-y-auto pr-3 custom-scrollbar">
-                          {comments.map((c, index) => (
+                          {displayComments.map((c, index) => (
                             <motion.div 
                               key={c.id} 
                               initial={{ opacity: 0, x: -10 }}
@@ -388,9 +495,18 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                                           type="button"
                                           variant="ghost"
                                           size="icon"
-                                          onClick={() => {
-                                            setComments(comments.filter(com => com.id !== c.id));
-                                            toast.success('Comment deleted');
+                                          onClick={async () => {
+                                            if (effectiveTicketId) {
+                                              try {
+                                                await deleteCommentMutation({ ticketId: effectiveTicketId, commentId: c.id }).unwrap();
+                                                toast.success('Comment deleted');
+                                              } catch (err: any) {
+                                                toast.error(err?.data?.error ?? err?.data?.message ?? 'Failed to delete comment');
+                                              }
+                                            } else {
+                                              setComments(comments.filter(com => com.id !== c.id));
+                                              toast.success('Comment deleted');
+                                            }
                                           }}
                                           className="h-7 w-7 rounded-lg text-slate-400 hover:text-red-600 hover:bg-white shadow-sm transition-all"
                                         >
@@ -411,12 +527,22 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                                       <Button
                                         type="button"
                                         size="icon"
-                                        onClick={() => {
-                                          setComments(comments.map(com => 
-                                            com.id === c.id ? { ...com, text: editingCommentText } : com
-                                          ));
-                                          setEditingCommentId(null);
-                                          toast.success('Comment updated');
+                                        onClick={async () => {
+                                          if (effectiveTicketId) {
+                                            try {
+                                              await updateCommentMutation({ ticketId: effectiveTicketId, commentId: c.id, text: editingCommentText }).unwrap();
+                                              setEditingCommentId(null);
+                                              toast.success('Comment updated');
+                                            } catch (err: any) {
+                                              toast.error(err?.data?.error ?? err?.data?.message ?? 'Failed to update comment');
+                                            }
+                                          } else {
+                                            setComments(comments.map(com =>
+                                              com.id === c.id ? { ...com, text: editingCommentText } : com
+                                            ));
+                                            setEditingCommentId(null);
+                                            toast.success('Comment updated');
+                                          }
                                         }}
                                         className="h-9 w-9 bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg shadow-green-100"
                                       >
@@ -457,9 +583,19 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                           type="button" 
                           size="icon" 
                           disabled={!commentText.trim()}
-                          onClick={() => {
-                            if (commentText.trim()) {
-                              setComments([...comments, { id: Date.now().toString(), author: currentUser.name, text: commentText, timestamp: 'Just now', isCurrentUser: true }]);
+                          onClick={async () => {
+                            if (!commentText.trim()) return;
+                            if (effectiveTicketId) {
+                              try {
+                                await addCommentMutation({ ticketId: effectiveTicketId, text: commentText.trim() }).unwrap();
+                                setCommentText('');
+                                toast.success('Note added');
+                              } catch (err: any) {
+                                const msg = err?.data?.error ?? err?.data?.message ?? err?.message ?? 'Failed to add comment';
+                                toast.error(msg);
+                              }
+                            } else {
+                              setComments([...comments, { id: Date.now().toString(), author: currentUser.name, text: commentText.trim(), timestamp: 'Just now', isCurrentUser: true }]);
                               setCommentText('');
                               toast.success('Note added');
                             }
@@ -515,13 +651,18 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       </Label>
                       <Select value={priorityValue} onValueChange={setPriorityValue}>
                         <SelectTrigger className="h-11 border-slate-200 rounded-xl font-semibold capitalize bg-slate-50/50">
-                          <SelectValue />
+                          <SelectValue placeholder="Select criticality" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
-                          <SelectItem value="low" className="font-bold text-blue-600 py-2.5 focus:bg-blue-50">Low Priority</SelectItem>
-                          <SelectItem value="medium" className="font-bold text-amber-600 py-2.5 focus:bg-amber-50">Medium Priority</SelectItem>
-                          <SelectItem value="high" className="font-bold text-orange-600 py-2.5 focus:bg-orange-50">High Priority</SelectItem>
-                          <SelectItem value="urgent" className="font-bold text-rose-600 py-2.5 focus:bg-rose-50">Urgent Response</SelectItem>
+                          {criticalityOptions.map((p) => (
+                            <SelectItem
+                              key={p}
+                              value={p}
+                              className={`font-bold py-2.5 ${p === 'low' ? 'text-blue-600 focus:bg-blue-50' : p === 'medium' ? 'text-amber-600 focus:bg-amber-50' : p === 'high' ? 'text-orange-600 focus:bg-orange-50' : 'text-rose-600 focus:bg-rose-50'}`}
+                            >
+                              {PRIORITY_LABELS[p] ?? p}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -533,13 +674,14 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       </Label>
                       <Select value={zoneValue} onValueChange={setZoneValue}>
                         <SelectTrigger className="h-11 border-slate-200 rounded-xl font-semibold bg-slate-50/50">
-                          <SelectValue />
+                          <SelectValue placeholder="Select zone" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
-                          <SelectItem value="South" className="font-medium focus:bg-slate-50">South Zone</SelectItem>
-                          <SelectItem value="North" className="font-medium focus:bg-slate-50">North Zone</SelectItem>
-                          <SelectItem value="East" className="font-medium focus:bg-slate-50">East Zone</SelectItem>
-                          <SelectItem value="West" className="font-medium focus:bg-slate-50">West Zone</SelectItem>
+                          {(zones as { id: string; name: string }[]).map((z) => (
+                            <SelectItem key={z.id} value={z.name} className="font-medium focus:bg-slate-50">
+                              {z.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -551,11 +693,11 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       </Label>
                       <Select value={selectedBranch} onValueChange={setSelectedBranch}>
                         <SelectTrigger className="h-11 border-slate-200 rounded-xl font-semibold bg-slate-50/50">
-                          <SelectValue />
+                          <SelectValue placeholder="Select branch" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
-                          {selectedLocation && zoneBranches[selectedLocation]?.map(b => (
-                            <SelectItem key={b.code} value={b.name} className="font-medium focus:bg-slate-50">{b.name}</SelectItem>
+                          {branchesForZone.map((b) => (
+                            <SelectItem key={b.id} value={b.name} className="font-medium focus:bg-slate-50">{b.name}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -572,7 +714,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
                           <SelectItem value="unassigned" className="font-bold text-blue-500 italic focus:bg-blue-50">Auto-assign Engine</SelectItem>
-                          {filteredUsersForAssignment.map(u => (
+                          {usersForAssignment.map((u: User) => (
                             <SelectItem key={u.id} value={u.name} className="font-medium focus:bg-slate-50">{u.name}</SelectItem>
                           ))}
                         </SelectContent>
@@ -586,21 +728,30 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       <Paperclip className="w-3 h-3" />
                     </Label>
                     
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      className="hidden"
+                      multiple
+                      accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif,.xls,.xlsx"
+                      onChange={(e) => {
+                        const files = e.target.files;
+                        if (files?.length) {
+                          setAttachments(prev => [
+                            ...prev,
+                            ...Array.from(files).map(file => ({ file, id: `${Date.now()}-${Math.random().toString(36).slice(2)}` })),
+                          ]);
+                          toast.success('File(s) added');
+                        }
+                        e.target.value = '';
+                      }}
+                    />
                     <div className="space-y-4">
-                      <motion.div 
+                      <motion.div
                         whileHover={{ scale: 1.01 }}
                         whileTap={{ scale: 0.99 }}
                         className="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center hover:border-blue-400 hover:bg-blue-50/30 transition-all cursor-pointer group bg-slate-50/50"
-                        onClick={() => {
-                          const mockFiles = [
-                            { name: 'technical_report.docx', size: '1.2 MB', type: 'application/msword' },
-                            { name: 'error_screenshot.jpg', size: '840 KB', type: 'image/jpeg' },
-                            { name: 'config_dump.json', size: '12 KB', type: 'application/json' }
-                          ];
-                          const newFile = mockFiles[Math.floor(Math.random() * mockFiles.length)];
-                          setAttachments([...attachments, { ...newFile, name: `${Date.now().toString().slice(-4)}_${newFile.name}` }]);
-                          toast.success('File attached');
-                        }}
+                        onClick={() => fileInputRef.current?.click()}
                       >
                         <div className="flex flex-col items-center gap-2">
                           <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-sm group-hover:shadow-md transition-all">
@@ -612,13 +763,60 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                           </div>
                         </div>
                       </motion.div>
-                      
+
+                      {isEditing && existingAttachments.length > 0 && (
+                        <div className="space-y-2 max-h-[180px] overflow-y-auto pr-2 custom-scrollbar">
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Existing attachments</span>
+                          {existingAttachments.map((att) => (
+                            <motion.div
+                              key={att.id}
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="flex items-center justify-between p-3 bg-slate-50 border border-slate-100 rounded-xl group hover:border-slate-200 transition-all"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-lg bg-slate-200 flex items-center justify-center text-slate-500 shrink-0">
+                                  <FileText className="w-4 h-4" />
+                                </div>
+                                <div className="flex flex-col min-w-0">
+                                  <span className="text-[11px] font-bold text-slate-700 truncate">{att.fileName}</span>
+                                  <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">
+                                    {att.fileSize != null ? formatFileSize(att.fileSize) : '—'}
+                                  </span>
+                                </div>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                disabled={isSubmitting}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  if (!effectiveTicketId) return;
+                                    try {
+                                      await deleteAttachment({ ticketId: effectiveTicketId, attachmentId: att.id }).unwrap();
+                                    toast.success('Attachment removed');
+                                  } catch {
+                                    toast.error('Failed to remove attachment');
+                                  }
+                                }}
+                                className="h-8 w-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </motion.div>
+                          ))}
+                        </div>
+                      )}
                       <AnimatePresence>
                         {attachments.length > 0 && (
                           <div className="space-y-2 max-h-[220px] overflow-y-auto pr-2 custom-scrollbar">
-                            {attachments.map((file, idx) => (
-                              <motion.div 
-                                key={idx} 
+                            {existingAttachments.length > 0 && (
+                              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">New uploads</span>
+                            )}
+                            {attachments.map(({ file, id }) => (
+                              <motion.div
+                                key={id}
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 exit={{ opacity: 0, scale: 0.95 }}
@@ -630,16 +828,16 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                                   </div>
                                   <div className="flex flex-col min-w-0">
                                     <span className="text-[11px] font-bold text-slate-700 truncate">{file.name}</span>
-                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{file.size}</span>
+                                    <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">{formatFileSize(file.size)}</span>
                                   </div>
                                 </div>
-                                <Button 
+                                <Button
                                   type="button"
                                   variant="ghost"
                                   size="icon"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setAttachments(attachments.filter((_, i) => i !== idx));
+                                    setAttachments(prev => prev.filter(a => a.id !== id));
                                     toast.info('Attachment removed');
                                   }}
                                   className="h-8 w-8 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"

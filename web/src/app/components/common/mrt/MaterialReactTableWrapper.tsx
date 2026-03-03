@@ -137,6 +137,7 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
     enableColumnActions,
     enableColumnFilters,
     enableSorting,
+    enablePagination: true,
     enableBottomToolbar,
     enableTopToolbar,
     enableRowActions,

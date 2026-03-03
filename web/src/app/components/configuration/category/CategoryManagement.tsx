@@ -1,16 +1,11 @@
-import { useState } from 'react';
-import { 
-  FolderOpen, Plus, Edit, Trash2, Save, X, Tag as TagIcon, 
-  Search, Filter, List, Table, Bug, Lightbulb, AlertCircle, 
-  Zap, User, CreditCard, Mail, Lock, Settings, Database, 
-  Globe, Shield, MoreVertical, Layers, CheckCircle2, Circle
-} from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import type { MRT_Row } from 'material-react-table';
+import { FolderOpen, Plus, Search, Filter, List, Table, Layers, CheckCircle2, Shield } from 'lucide-react';
 import { Card } from '../../common/ui/card';
 import { Button } from '../../common/ui/button';
 import { Input } from '../../common/ui/input';
 import { Label } from '../../common/ui/label';
 import { Textarea } from '../../common/ui/textarea';
-import { Badge } from '../../common/ui/badge';
 import {
   Select,
   SelectContent,
@@ -33,27 +28,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '../../common/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../common/ui/alert-dialog';
+import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
+import { MaterialReactTableCardListWrapper } from '@/app/components/common/mrt/MaterialReactTableCardListWrapper';
 import { useGetCategoriesQuery, useCreateCategoryMutation, useUpdateCategoryMutation, useDeleteCategoryMutation } from '@/app/store/apis/categoriesApi';
 import { useGetSLAsQuery } from '@/app/store/apis/slasApi';
 import { Category } from '@/app/types';
 import { toast } from 'sonner';
-import { motion, AnimatePresence } from 'motion/react';
-
-const iconOptions = [
-  { name: 'Folder', icon: FolderOpen },
-  { name: 'Bug', icon: Bug },
-  { name: 'Lightbulb', icon: Lightbulb },
-  { name: 'Alert', icon: AlertCircle },
-  { name: 'Zap', icon: Zap },
-  { name: 'User', icon: User },
-  { name: 'CreditCard', icon: CreditCard },
-  { name: 'Mail', icon: Mail },
-  { name: 'Lock', icon: Lock },
-  { name: 'Settings', icon: Settings },
-  { name: 'Database', icon: Database },
-  { name: 'Globe', icon: Globe },
-  { name: 'Shield', icon: Shield }
-];
+import { iconOptions } from './categoryIcons';
+import { getCategoryTableColumns } from './categoryTableColumns';
+import { CategoryCardContent } from './CategoryCardContent';
+import { CategoryRowActions } from './CategoryRowActions';
 
 const colorOptions = [
   { name: 'Red', value: '#ef4444' },
@@ -68,13 +61,14 @@ const colorOptions = [
 ];
 
 export function CategoryManagement() {
-  const { data: categories = [] } = useGetCategoriesQuery();
+  const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
   const { data: slas = [] } = useGetSLAsQuery();
   const [createCategory] = useCreateCategoryMutation();
   const [updateCategoryMutation] = useUpdateCategoryMutation();
   const [deleteCategoryMutation] = useDeleteCategoryMutation();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryToDelete, setCategoryToDelete] = useState<Category | null>(null);
   const [viewMode, setViewMode] = useState<'list' | 'table'>('list');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -138,16 +132,18 @@ export function CategoryManagement() {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async () => {
+    if (!categoryToDelete) return;
     try {
-      await deleteCategoryMutation(id).unwrap();
+      await deleteCategoryMutation(categoryToDelete.id).unwrap();
+      setCategoryToDelete(null);
       toast.success('Category deleted');
     } catch {
       toast.error('Failed to delete category');
     }
-  };
+  }, [categoryToDelete, deleteCategoryMutation]);
 
-  const openEditDialog = (category: Category) => {
+  const openEditDialog = useCallback((category: Category) => {
     setEditingCategory(category);
     setFormData({
       name: category.name,
@@ -158,9 +154,9 @@ export function CategoryManagement() {
       parentId: category.parentId || 'none',
     });
     setIsDialogOpen(true);
-  };
+  }, []);
 
-  const resetForm = () => {
+  const resetForm = useCallback(() => {
     setFormData({
       name: '',
       description: '',
@@ -170,13 +166,24 @@ export function CategoryManagement() {
       parentId: 'none',
     });
     setEditingCategory(null);
-  };
+  }, []);
 
-  const getIcon = (iconName: string) => {
-    const option = iconOptions.find(o => o.name === iconName) || iconOptions[0];
-    const IconComponent = option.icon;
-    return <IconComponent className="w-5 h-5" />;
-  };
+  const getParentName = useCallback(
+    (id: string) => categories.find((c) => c.id === id)?.name,
+    [categories]
+  );
+  const getSlaName = useCallback(
+    (slaId: string | undefined) =>
+      slaId ? slas.find((s) => s.id === slaId)?.name ?? 'Default Policy' : 'Default Policy',
+    [slas]
+  );
+  const categoryColumns = useMemo(
+    () => getCategoryTableColumns(getParentName, getSlaName),
+    [getParentName, getSlaName]
+  );
+
+  const EMPTY_MESSAGE =
+    'No categories found. Try adjusting your filters or create a new category.';
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
@@ -324,14 +331,17 @@ export function CategoryManagement() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            {iconOptions.map((opt) => (
-                              <SelectItem key={opt.name} value={opt.name}>
-                                <div className="flex items-center gap-2">
-                                  <opt.icon className="w-4 h-4" />
-                                  <span>{opt.name}</span>
-                                </div>
-                              </SelectItem>
-                            ))}
+                            {iconOptions.map((opt) => {
+                              const Icon = opt.icon;
+                              return (
+                                <SelectItem key={opt.name} value={opt.name}>
+                                  <div className="flex items-center gap-2">
+                                    <Icon className="w-4 h-4" />
+                                    <span>{opt.name}</span>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           </SelectContent>
                         </Select>
                       </div>
@@ -415,171 +425,78 @@ export function CategoryManagement() {
             </div>
           </div>
 
-          {/* Categories Content */}
-          <div className="min-h-[400px]">
-            {filteredCategories.length > 0 ? (
-              viewMode === 'list' ? (
-                <div className="grid gap-3">
-                  {filteredCategories.map((category, index) => (
-                    <motion.div
-                      key={category.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.03 }}
-                    >
-                      <Card className="p-4 hover:shadow-md transition-all border-slate-200 group bg-white">
-                        <div className="flex items-center justify-between gap-6">
-                          <div className="flex items-center gap-4 flex-1">
-                            <div 
-                              className="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-sm"
-                              style={{ backgroundColor: category.color }}
-                            >
-                              {getIcon(category.icon)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2 mb-0.5">
-                                <h3 className="font-bold text-slate-900 truncate">{category.name}</h3>
-                                <Badge variant="outline" className="text-[10px] uppercase font-bold text-slate-400 border-slate-200">
-                                  {category.id}
-                                </Badge>
-                              </div>
-                              <p className="text-sm text-slate-500 truncate pr-4">
-                                {category.description}
-                              </p>
-                            </div>
-                            <div className="hidden lg:flex items-center gap-6 px-4 border-l border-slate-100">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Category Type</span>
-                                <span className="text-sm font-semibold text-slate-700">
-                                  {category.parentId ? `Sub of ${categories.find(c => c.id === category.parentId)?.name}` : 'Main Category'}
-                                </span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SLA Policy</span>
-                                <span className="text-sm font-semibold text-slate-700">
-                                  {category.slaId ? slas.find(s => s.id === category.slaId)?.name : 'Default Policy'}
-                                </span>
-                              </div>
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Status</span>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                  <span className="text-xs font-bold text-green-700">Active</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => openEditDialog(category)}
-                              className="h-9 w-9 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDelete(category.id)}
-                              className="h-9 w-9 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </Card>
-                    </motion.div>
-                  ))}
-                </div>
-              ) : (
-                <Card className="border-slate-200 shadow-sm overflow-hidden bg-white">
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-slate-50/80 border-b border-slate-200">
-                        <tr>
-                          <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
-                          <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Type</th>
-                          <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">SLA Policy</th>
-                          <th className="text-left py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                          <th className="text-right py-4 px-6 text-xs font-bold text-slate-500 uppercase tracking-wider pr-10">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {filteredCategories.map((category, index) => (
-                          <motion.tr
-                            key={category.id}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: index * 0.02 }}
-                            className="hover:bg-slate-50/50 transition-colors"
-                          >
-                            <td className="py-4 px-6">
-                              <div className="flex items-center gap-3">
-                                <div 
-                                  className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[10px]"
-                                  style={{ backgroundColor: category.color }}
-                                >
-                                  {getIcon(category.icon)}
-                                </div>
-                                <div>
-                                  <div className="font-bold text-slate-900">{category.name}</div>
-                                  <div className="text-[10px] text-slate-400 font-mono">{category.id}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="py-4 px-6">
-                              <span className="text-sm text-slate-600 font-medium">
-                                {category.parentId ? 'Sub Category' : 'Main Category'}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6">
-                              <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-medium">
-                                {category.slaId ? slas.find(s => s.id === category.slaId)?.name : 'Default Policy'}
-                              </Badge>
-                            </td>
-                            <td className="py-4 px-6">
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                                <span className="text-xs font-bold text-green-700">ACTIVE</span>
-                              </div>
-                            </td>
-                            <td className="py-4 px-6 pr-10">
-                              <div className="flex gap-1 justify-end">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => openEditDialog(category)}
-                                  className="h-8 w-8 p-0 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDelete(category.id)}
-                                  className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
-              )
-            ) : (
-              <div className="py-20 text-center bg-white rounded-xl border border-dashed border-slate-300">
-                <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-slate-900">No categories found</h3>
-                <p className="text-slate-500">Try adjusting your filters or create a new category.</p>
-              </div>
-            )}
-          </div>
+          {/* List view */}
+          {viewMode === 'list' && (
+            <MaterialReactTableCardListWrapper<Category>
+              data={filteredCategories}
+              isLoading={categoriesLoading}
+              pageSize={10}
+              emptyMessage={EMPTY_MESSAGE}
+              getRowId={(row: Category) => row.id}
+              renderCardContent={(category: Category) => (
+                <CategoryCardContent
+                  category={category}
+                  parentName={category.parentId ? getParentName(category.parentId) : undefined}
+                  slaName={getSlaName(category.slaId)}
+                />
+              )}
+              renderRowActions={({ row }: { row: MRT_Row<Category> }) => (
+                <CategoryRowActions
+                  row={row}
+                  onEdit={openEditDialog}
+                  onDelete={setCategoryToDelete}
+                  size="icon"
+                />
+              )}
+            />
+          )}
+
+          {/* Table view */}
+          {viewMode === 'table' && (
+            <MaterialReactTableWrapper<Category>
+              columns={categoryColumns}
+              data={filteredCategories}
+              isLoading={categoriesLoading}
+              enableTopToolbar={false}
+              enableRowActions
+              positionActionsColumn="last"
+              emptyMessage={EMPTY_MESSAGE}
+              renderRowActions={({ row }: { row: MRT_Row<Category> }) => (
+                <CategoryRowActions
+                  row={row}
+                  onEdit={openEditDialog}
+                  onDelete={setCategoryToDelete}
+                  size="sm"
+                />
+              )}
+            />
+          )}
+
+          {/* Delete confirmation */}
+          <AlertDialog
+            open={!!categoryToDelete}
+            onOpenChange={(open) => !open && setCategoryToDelete(null)}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete category?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove &quot;{categoryToDelete?.name}&quot;. This action
+                  cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <Button
+                  variant="destructive"
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={() => void handleDelete()}
+                >
+                  Delete
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
     </div>

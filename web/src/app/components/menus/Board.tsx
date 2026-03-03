@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react';
-import { Filter, Building2, UserCircle, AlertCircle, Search, Edit2, Plus, Globe, GitBranch } from 'lucide-react';
+import { Filter, UserCircle, AlertCircle, Search, Edit2, Plus, Globe, GitBranch, Loader2 } from 'lucide-react';
 import { Card } from '../common/ui/card';
 import { Button } from '../common/ui/button';
 import { Badge } from '../common/ui/badge';
 import { Input } from '../common/ui/input';
 import { useGetUsersQuery } from '@/app/store/apis/usersApi';
+import { useGetZonesQuery } from '@/app/store/apis/zonesApi';
 import { motion } from 'motion/react';
 import {
   Select,
@@ -17,6 +18,7 @@ import { User as UserType, Ticket, ViewType } from '@/app/types';
 import { useTickets } from '@/app/hooks/useTickets';
 import { DndProvider, useDrag, useDrop } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
+import { toast } from 'sonner';
 
 interface BoardProps {
   onViewTicket: (ticketId: string, edit?: boolean) => void;
@@ -144,7 +146,7 @@ function BoardColumn({ id, title, color, tickets, onViewTicket, currentUser, pri
   return (
     <div 
       ref={(node) => { drop(node); }}
-      className={`flex-shrink-0 w-80 flex flex-col transition-colors duration-200 rounded-lg ${isOver ? 'ring-2 ring-blue-400 ring-offset-2' : ''}`}
+      className={`flex-shrink-0 w-58 flex flex-col transition-colors duration-200 rounded-lg ${isOver ? 'ring-2 ring-blue-400 ring-offset-2' : ''}`}
     >
       <div className={`bg-gradient-to-r ${color} text-white px-4 py-3 rounded-t-lg shadow-md`}>
         <div className="flex items-center justify-between">
@@ -178,31 +180,44 @@ function BoardColumn({ id, title, color, tickets, onViewTicket, currentUser, pri
 }
 
 export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: BoardProps) {
-  const { tickets, updateTicket } = useTickets();
-  const { data: users = [] } = useGetUsersQuery();
+  const { data: zones = [] } = useGetZonesQuery();
+  const { data: users = [] } = useGetUsersQuery(undefined, { skip: currentUser.role === 'customer' });
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [zoneFilter, setZoneFilter] = useState<string>('all');
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  const apiParams = useMemo(() => {
+    const zone = zoneFilter === 'all' ? undefined : zoneFilter;
+    const priority = priorityFilter === 'all' ? undefined : priorityFilter;
+    const assignedToId = assigneeFilter === 'all' ? undefined : (users as { id: string; name: string }[]).find(u => u.name === assigneeFilter)?.id;
+    return { zone, priority, assignedTo: assignedToId };
+  }, [zoneFilter, priorityFilter, assigneeFilter, users]);
+
+  const { tickets, updateTicket, isLoading, isError, refetch } = useTickets(apiParams);
+
   const accessibleTickets = useMemo(() => {
     if (currentUser.role === 'admin') return tickets;
     if (currentUser.role === 'customer') return tickets.filter(ticket => ticket.createdBy === currentUser.name);
-    if (currentUser.zone) return tickets.filter(ticket => ticket.zone === currentUser.zone);
+    if (currentUser.zone && zones.length) {
+      const zoneList = zones as { id: string; name: string }[];
+      const userZoneName = zoneList.find(z => z.id === currentUser.zone)?.name;
+      if (userZoneName) return tickets.filter(ticket => ticket.zone === userZoneName);
+    }
     return tickets;
-  }, [tickets, currentUser]);
+  }, [tickets, currentUser, zones]);
 
-  const filteredTickets = accessibleTickets.filter((ticket) => {
-    const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
-    const matchesZone = zoneFilter === 'all' || ticket.zone === zoneFilter;
-    const matchesAssignee = assigneeFilter === 'all' || ticket.assignedTo === assigneeFilter;
-    const matchesSearch = ticket.title.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesPriority && matchesZone && matchesAssignee && matchesSearch;
-  });
+  const filteredTickets = useMemo(() => {
+    return accessibleTickets.filter((ticket) => {
+      const matchesSearch = !searchQuery.trim() || ticket.title.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesSearch;
+    });
+  }, [accessibleTickets, searchQuery]);
 
   const handleMoveTicket = async (ticketId: string, newStatus: string) => {
     try {
-      await updateTicket(ticketId, { status: newStatus as any });
+      await updateTicket(ticketId, { status: newStatus as Ticket['status'] });
+      toast.success('Status updated');
     } catch {
       toast.error('Failed to update ticket status');
     }
@@ -211,6 +226,7 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
   const columns = [
     { id: 'open', title: 'Open', color: 'from-slate-600 to-slate-700' },
     { id: 'in-progress', title: 'In Progress', color: 'from-purple-600 to-violet-600' },
+    { id: 'on-hold', title: 'On Hold', color: 'from-amber-600 to-orange-600' },
     { id: 'resolved', title: 'Resolved', color: 'from-green-600 to-emerald-600' },
     { id: 'closed', title: 'Closed', color: 'from-gray-600 to-slate-600' },
   ];
@@ -222,7 +238,8 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
     low: 'bg-blue-100 text-blue-700 border-blue-200',
   };
 
-  const uniqueZones = Array.from(new Set((users as { zone?: string }[]).map(u => u.zone).filter(Boolean)));
+  const zoneOptions = useMemo(() => (zones as { id: string; name: string }[]).map(z => z.name), [zones]);
+  const assigneeOptions = useMemo(() => users as { id: string; name: string }[], [users]);
 
   return (
     <DndProvider backend={HTML5Backend}>
@@ -240,15 +257,19 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
               />
             </div>
 
-            {currentUser.zone && currentUser.role !== 'admin' && (
-              <Badge 
-                variant="outline"
-                className="gap-1.5 border-blue-200 text-blue-600 bg-blue-50"
-              >
-                <Globe className="w-3 h-3" />
-                {currentUser.zone} Zone
-              </Badge>
-            )}
+            {currentUser.zone && currentUser.role !== 'admin' && (() => {
+              const zoneList = zones as { id: string; name: string }[];
+              const userZoneName = zoneList.find(z => z.id === currentUser.zone)?.name ?? currentUser.zone;
+              return (
+                <Badge 
+                  variant="outline"
+                  className="gap-1.5 border-blue-200 text-blue-600 bg-blue-50"
+                >
+                  <Globe className="w-3 h-3" />
+                  {userZoneName} Zone
+                </Badge>
+              );
+            })()}
 
             <Select value={priorityFilter} onValueChange={setPriorityFilter}>
               <SelectTrigger className="w-[160px]">
@@ -271,9 +292,9 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Zones</SelectItem>
-                {uniqueZones.map(zone => (
-                  <SelectItem key={zone} value={zone!}>
-                    {zone}
+                {zoneOptions.map((name) => (
+                  <SelectItem key={name} value={name}>
+                    {name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -286,8 +307,8 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Assignees</SelectItem>
-                {users.map((user: { id: string; name: string }) => (
-                  <SelectItem key={user.name} value={user.name}>
+                {assigneeOptions.map((user) => (
+                  <SelectItem key={user.id} value={user.name}>
                     {user.name}
                   </SelectItem>
                 ))}
@@ -305,21 +326,35 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
         </div>
 
         <div className="flex-1 overflow-x-auto overflow-y-hidden p-6">
-          <div className="flex gap-4 h-full min-w-max">
-            {columns.map((column) => (
-              <BoardColumn
-                key={column.id}
-                id={column.id}
-                title={column.title}
-                color={column.color}
-                tickets={filteredTickets.filter(t => t.status === column.id)}
-                onViewTicket={onViewTicket}
-                currentUser={currentUser}
-                priorityColors={priorityColors}
-                onMoveTicket={handleMoveTicket}
-              />
-            ))}
-          </div>
+          {isError && (
+            <div className="flex flex-col items-center justify-center py-16 gap-4">
+              <p className="text-slate-600 font-medium">Could not load board. Check that the backend is running.</p>
+              <Button variant="outline" onClick={() => refetch()}>Retry</Button>
+            </div>
+          )}
+          {!isError && isLoading && (
+            <div className="flex items-center justify-center py-24 gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <span className="text-slate-600 font-medium">Loading board...</span>
+            </div>
+          )}
+          {!isError && !isLoading && (
+            <div className="flex gap-4 h-full min-w-max">
+              {columns.map((column) => (
+                <BoardColumn
+                  key={column.id}
+                  id={column.id}
+                  title={column.title}
+                  color={column.color}
+                  tickets={filteredTickets.filter(t => t.status === column.id)}
+                  onViewTicket={onViewTicket}
+                  currentUser={currentUser}
+                  priorityColors={priorityColors}
+                  onMoveTicket={handleMoveTicket}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </DndProvider>
