@@ -59,6 +59,11 @@ function TicketListCardContent({ ticket }: { ticket: Ticket }) {
   return (
     <div className="w-full min-w-0">
       <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
+        {ticket.ticketNumber && (
+          <Badge variant="outline" className="font-mono font-semibold text-slate-600 bg-slate-100 border-slate-200">
+            {ticket.ticketNumber}
+          </Badge>
+        )}
         <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
         <Badge className={statusColors[ticket.status]}>{ticket.status.replace('-', ' ')}</Badge>
         <Badge variant="outline">{ticket.category}</Badge>

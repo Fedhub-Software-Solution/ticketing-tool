@@ -186,34 +186,44 @@ export function MyOpenTickets({ onViewTicket, onTrackTicket, currentUser }: MyOp
               }
               errorMessage="Failed to load open tickets. Check that the API is running and you are logged in."
               renderCardContent={(ticket) => (
-                <>
-                  <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
-                    <span className="font-mono text-slate-500">#{ticket.id}</span>
-                    <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
-                    <Badge className={statusColors[ticket.status]}>{ticket.status.replace('-', ' ')}</Badge>
-                    <Badge variant="outline">{ticket.category}</Badge>
-                    {ticket.zone && (
-                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 flex items-center gap-1">
-                        <Globe className="w-3 h-3" /> {ticket.zone}
-                      </Badge>
-                    )}
-                    {ticket.branch && (
-                      <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-100 flex items-center gap-1">
-                        <GitBranch className="w-3 h-3" /> {ticket.branch}
-                      </Badge>
-                    )}
-                  </div>
-                  <h3 className="font-bold text-slate-900 mb-1">{ticket.title}</h3>
-                  <p className="text-sm text-slate-500 line-clamp-1">{ticket.description}</p>
-                  <div className="flex items-center gap-4 mt-4 text-[10px] text-slate-400 font-medium">
-                    <span className="flex items-center gap-1">
-                      <User className="w-3 h-3" /> {ticket.assignedTo}
+                <div className="flex flex-col min-w-0 w-full">
+                  <div className="flex items-start gap-2 mb-3 flex-wrap">
+                    <span className="font-bold text-slate-800 text-sm shrink-0">
+                      #{ticket.ticketNumber ?? ticket.id}
                     </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" /> {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge className={`${priorityColors[ticket.priority]} text-xs`}>{ticket.priority}</Badge>
+                      <Badge className={`${statusColors[ticket.status]} text-xs`}>{ticket.status.replace('-', ' ')}</Badge>
+                      <Badge variant="outline" className="text-xs bg-slate-100 text-slate-700 border-slate-200">
+                        {ticket.category}
+                      </Badge>
+                      {ticket.zone && (
+                        <Badge variant="outline" className="text-xs bg-blue-100 text-blue-700 border-blue-200 flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> {ticket.zone}
+                        </Badge>
+                      )}
+                      {ticket.branch && (
+                        <Badge variant="outline" className="text-xs bg-blue-100 text-blue-700 border-blue-200 flex items-center gap-1">
+                          <GitBranch className="w-3 h-3" /> {ticket.branch}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <h3 className="font-bold text-slate-900 text-base mb-1.5 leading-tight">
+                    {ticket.title}
+                  </h3>
+                  <p className="text-sm text-slate-500 line-clamp-2 mb-4">
+                    {ticket.description || '—'}
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-slate-500 font-medium mt-auto">
+                    <span className="flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-slate-400" /> {ticket.assignedTo ?? '—'}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-400" /> {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}
                     </span>
                   </div>
-                </>
+                </div>
               )}
               renderRowActions={({ row }) => (
                 <div className="flex gap-1">

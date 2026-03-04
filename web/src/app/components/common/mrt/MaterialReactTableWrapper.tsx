@@ -181,6 +181,11 @@ export function MaterialReactTableWrapper<T extends Record<string, any>>({
         backgroundColor: 'var(--color-slate-50, oklch(98.4% 0.003 247.858))',
       },
     },
+    muiTableBodyRowProps: ({ row }) => ({
+      sx: {
+        backgroundColor: row.index % 2 === 1 ? 'var(--color-slate-50, #f8fafc)' : undefined,
+      },
+    }),
     muiTableBodyCellProps: {
       sx: {
         textAlign: 'left',

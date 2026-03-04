@@ -2,8 +2,9 @@ import { LayoutDashboard, Ticket, Settings, BarChart3, Users, Tag, Building, Log
 import { ViewType, User } from '@/app/types';
 import { motion } from 'motion/react';
 import { Badge } from './common/ui/badge';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useTickets } from '@/app/hooks/useTickets';
+import { useGetZonesQuery } from '@/app/store/apis/zonesApi';
 
 interface SidebarProps {
   currentView: ViewType;
@@ -14,8 +15,23 @@ interface SidebarProps {
 
 export function Sidebar({ currentView, onNavigate, currentUser, onLogout }: SidebarProps) {
   const { tickets } = useTickets();
+  const { data: zones = [] } = useGetZonesQuery();
   const [isCollapsed, setIsCollapsed] = useState(false);
-  
+
+  const zoneList = useMemo(() => zones as { id: string; name: string }[], [zones]);
+  const userZoneName = useMemo(
+    () => (currentUser.zone && zoneList.length ? zoneList.find((z) => z.id === currentUser.zone)?.name : null),
+    [currentUser.zone, zoneList]
+  );
+
+  // Accessible tickets (same logic as MyOpenTickets / MyClosedTickets / MyOverdueTickets)
+  const accessibleTickets = useMemo(() => {
+    if (currentUser.role === 'admin') return tickets;
+    if (currentUser.role === 'customer') return tickets.filter((t) => t.createdBy === currentUser.name);
+    if (userZoneName) return tickets.filter((t) => t.zone === userZoneName || t.assignedTo === currentUser.name);
+    return tickets.filter((t) => t.assignedTo === currentUser.name);
+  }, [tickets, currentUser, userZoneName]);
+
   // Calculate escalated tickets for current user based on region
   const getEscalatedTicketsCount = () => {
     if (currentUser.role === 'admin') {
@@ -24,7 +40,7 @@ export function Sidebar({ currentView, onNavigate, currentUser, onLogout }: Side
       return tickets.filter(ticket => 
         ticket.escalationLevel && 
         ticket.escalationLevel > 0 && 
-        ticket.zone === currentUser.zone
+        ticket.zone === userZoneName
       ).length;
     } else if (currentUser.role === 'agent') {
       return tickets.filter(ticket => 
@@ -38,30 +54,24 @@ export function Sidebar({ currentView, onNavigate, currentUser, onLogout }: Side
 
   const escalatedCount = getEscalatedTicketsCount();
 
-  // Calculate my tickets counts
-  const getMyTicketsCount = (status: string) => {
-    return tickets.filter(ticket => {
-      const isMyTicket = currentUser.role === 'customer' 
-        ? ticket.createdBy === currentUser.name || (ticket as any).customerEmail === currentUser.email
-        : ticket.assignedTo === currentUser.name;
-        
-      if (status === 'open') {
-        return isMyTicket && ticket.status === 'open';
-      } else if (status === 'closed') {
-        return isMyTicket && ticket.status === 'closed';
-      } else if (status === 'overdue') {
-        if (!ticket.slaDueDate) return false;
-        const dueDate = new Date(ticket.slaDueDate);
-        const now = new Date();
-        return isMyTicket && ticket.status !== 'closed' && dueDate < now;
-      }
-      return false;
+  // Open: status === 'open' (matches MyOpenTickets)
+  const myOpenCount = useMemo(
+    () => accessibleTickets.filter((t) => t.status === 'open').length,
+    [accessibleTickets]
+  );
+  // Closed: closed or resolved (matches MyClosedTickets)
+  const myClosedCount = useMemo(
+    () => accessibleTickets.filter((t) => t.status === 'closed' || t.status === 'resolved').length,
+    [accessibleTickets]
+  );
+  // Overdue: not closed/resolved, has SLA due date, past due (matches MyOverdueTickets)
+  const myOverdueCount = useMemo(() => {
+    const now = new Date();
+    return accessibleTickets.filter((t) => {
+      if (t.status === 'closed' || t.status === 'resolved' || !t.slaDueDate) return false;
+      return new Date(t.slaDueDate) < now;
     }).length;
-  };
-
-  const myOpenCount = getMyTicketsCount('open');
-  const myClosedCount = getMyTicketsCount('closed');
-  const myOverdueCount = getMyTicketsCount('overdue');
+  }, [accessibleTickets]);
 
   // Role-based menu items
   const getMenuItems = () => {
@@ -227,7 +237,7 @@ function SidebarItem({ icon: Icon, label, count, isActive, onClick, isCollapsed,
         <Icon className={`w-5 h-5 flex-shrink-0 transition-colors duration-300 ${isActive ? activeColor : 'text-slate-400 group-hover:text-slate-900'}`} />
         {!isCollapsed && <span className="text-sm font-bold tracking-tight">{label}</span>}
       </div>
-      {!isCollapsed && count > 0 && (
+      {!isCollapsed && (
         <Badge className={`${isActive ? `${activeColor} bg-white border border-slate-100` : 'bg-slate-100 text-slate-500'} border-0 min-w-[22px] h-5.5 px-2 flex items-center justify-center font-black text-[10px] rounded-lg transition-all duration-300 group-hover:scale-110`}>
           {count}
         </Badge>

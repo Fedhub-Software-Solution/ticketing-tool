@@ -4,9 +4,19 @@ import { AuthRequest } from '../middleware';
 import { createNotification } from './notificationsController';
 import { sendTicketNotificationEmail, type TicketDetailsForEmail } from '../services/email';
 
+/** Resolve public id (TKT-001) or uuid to internal uuid for DB lookups. */
+export async function resolveTicketId(id: string): Promise<string | null> {
+  if (/^TKT-\d+$/.test(id)) {
+    const r = await pool.query('SELECT id FROM tickets WHERE ticket_number = $1', [id]);
+    return r.rows[0]?.id ?? null;
+  }
+  return id;
+}
+
 function toTicket(row: any) {
   return {
-    id: row.id,
+    id: row.ticket_number ?? row.id,
+    ticketNumber: row.ticket_number ?? null,
     title: row.title,
     description: row.description,
     status: row.status,
@@ -106,6 +116,11 @@ export async function listTickets(req: AuthRequest, res: Response): Promise<void
 
 export async function getTicket(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
+  const ticketId = await resolveTicketId(id);
+  if (!ticketId) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
   const r = await pool.query(
     `SELECT t.*, c.name AS category_name,
             z.name AS zone_name, b.name AS branch_name,
@@ -118,7 +133,7 @@ export async function getTicket(req: AuthRequest, res: Response): Promise<void> 
      LEFT JOIN users u1 ON t.assigned_to_id = u1.id
      LEFT JOIN users u2 ON t.created_by_id = u2.id
      WHERE t.id = $1`,
-    [id]
+    [ticketId]
   );
   const row = r.rows[0];
   if (!row) {
@@ -155,10 +170,15 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
   const zoneId = await resolveZoneId(zone);
   const branchId = await resolveBranchId(branch, zoneId);
 
+  const nextNum = await pool.query("SELECT nextval('ticket_number_seq') AS n");
+  const n = nextNum.rows[0]?.n ?? 1;
+  const ticketNumber = 'TKT-' + String(n).padStart(3, '0');
+
   const r = await pool.query(
-    `INSERT INTO tickets (title, description, status, priority, category_id, sub_category, zone_id, location, branch_id, branch_code, assigned_to_id, created_by_id, sla_id, sla_due_date, tags, parent_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`,
+    `INSERT INTO tickets (ticket_number, title, description, status, priority, category_id, sub_category, zone_id, location, branch_id, branch_code, assigned_to_id, created_by_id, sla_id, sla_due_date, tags, parent_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING *`,
     [
+      ticketNumber,
       title,
       description || null,
       status,
@@ -214,7 +234,7 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
 
   // Email: requester (person ticket is for), assignee, and creator (if different)
   const ticketDetails: TicketDetailsForEmail = {
-    ticketId: row.id,
+    ticketId: row.ticket_number ?? row.id,
     title: row.title,
     description: row.description ?? undefined,
     status: row.status,
@@ -272,7 +292,12 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
 }
 
 export async function updateTicket(req: AuthRequest, res: Response): Promise<void> {
-  const { id } = req.params;
+  const { id: idParam } = req.params;
+  const id = await resolveTicketId(idParam);
+  if (!id) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
   const {
     title,
     description,
@@ -371,7 +396,7 @@ export async function updateTicket(req: AuthRequest, res: Response): Promise<voi
 
   // Email requester and assigned person with full updated ticket details
   const ticketDetails: TicketDetailsForEmail = {
-    ticketId: id,
+    ticketId: ticketRow.ticket_number ?? id,
     title: ticketRow.title,
     description: ticketRow.description ?? undefined,
     status: ticketRow.status,
@@ -420,7 +445,12 @@ export async function updateTicket(req: AuthRequest, res: Response): Promise<voi
 
 export async function deleteTicket(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
-  const r = await pool.query('DELETE FROM tickets WHERE id = $1 RETURNING id', [id]);
+  const ticketId = await resolveTicketId(id);
+  if (!ticketId) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
+  const r = await pool.query('DELETE FROM tickets WHERE id = $1 RETURNING id', [ticketId]);
   if (r.rowCount === 0) {
     res.status(404).json({ error: 'Ticket not found' });
     return;

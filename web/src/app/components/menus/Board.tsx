@@ -6,7 +6,6 @@ import { Badge } from '../common/ui/badge';
 import { Input } from '../common/ui/input';
 import { useGetUsersQuery } from '@/app/store/apis/usersApi';
 import { useGetZonesQuery } from '@/app/store/apis/zonesApi';
-import { motion } from 'motion/react';
 import {
   Select,
   SelectContent,
@@ -37,9 +36,10 @@ interface DraggableTicketProps {
   onViewTicket: (ticketId: string, edit?: boolean) => void;
   currentUser: UserType;
   priorityColors: Record<string, string>;
+  isUpdating?: boolean;
 }
 
-function DraggableTicket({ ticket, index, onViewTicket, currentUser, priorityColors }: DraggableTicketProps) {
+function DraggableTicket({ ticket, index, onViewTicket, currentUser, priorityColors, isUpdating }: DraggableTicketProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: ItemTypes.TICKET,
     item: { id: ticket.id, status: ticket.status },
@@ -49,19 +49,27 @@ function DraggableTicket({ ticket, index, onViewTicket, currentUser, priorityCol
   }), [ticket.id, ticket.status]);
 
   return (
-    <motion.div
+    <div
       ref={(node) => { drag(node); }}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.3 }}
-      style={{ opacity: isDragging ? 0.5 : 1, cursor: 'grab' }}
+      style={{ opacity: isDragging ? 0.5 : 1, cursor: isUpdating ? 'wait' : 'grab' }}
+      className="relative"
     >
+      {isUpdating && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-lg bg-white/90 backdrop-blur-sm border border-blue-200 shadow-md">
+          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+          <span className="text-xs font-medium text-slate-600">Updating status...</span>
+        </div>
+      )}
       <Card
         className="p-4 border-slate-200 hover:shadow-lg hover:border-slate-300 transition-all duration-200 bg-white group"
       >
-        <div className="flex items-start justify-between mb-1">
-          <span className="text-xs font-mono font-medium text-slate-500">{ticket.id}</span>
-          <div className="flex items-center gap-1">
+        <div className="flex items-start justify-between gap-2 mb-1">
+          {ticket.ticketNumber && (
+            <span className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-0.5 rounded border border-slate-200/50 shrink-0">
+              {ticket.ticketNumber}
+            </span>
+          )}
+          <div className="flex items-center gap-1 shrink-0 ml-auto">
             <Button
               type="button"
               variant="ghost"
@@ -87,7 +95,7 @@ function DraggableTicket({ ticket, index, onViewTicket, currentUser, priorityCol
           </div>
         </div>
 
-        <h4 className="font-semibold text-slate-900 mb-2 line-clamp-2 text-sm">
+        <h4 className="font-semibold text-slate-900 line-clamp-2 text-sm mb-2">
           {ticket.title}
         </h4>
 
@@ -115,7 +123,7 @@ function DraggableTicket({ ticket, index, onViewTicket, currentUser, priorityCol
           </div>
         </div>
       </Card>
-    </motion.div>
+    </div>
   );
 }
 
@@ -128,9 +136,10 @@ interface ColumnProps {
   currentUser: UserType;
   priorityColors: Record<string, string>;
   onMoveTicket: (ticketId: string, newStatus: string) => void;
+  movingTicketId: string | null;
 }
 
-function BoardColumn({ id, title, color, tickets, onViewTicket, currentUser, priorityColors, onMoveTicket }: ColumnProps) {
+function BoardColumn({ id, title, color, tickets, onViewTicket, currentUser, priorityColors, onMoveTicket, movingTicketId }: ColumnProps) {
   const [{ isOver }, drop] = useDrop(() => ({
     accept: ItemTypes.TICKET,
     drop: (item: { id: string, status: string }) => {
@@ -166,6 +175,7 @@ function BoardColumn({ id, title, color, tickets, onViewTicket, currentUser, pri
             onViewTicket={onViewTicket} 
             currentUser={currentUser} 
             priorityColors={priorityColors}
+            isUpdating={movingTicketId === ticket.id}
           />
         ))}
 
@@ -214,12 +224,17 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
     });
   }, [accessibleTickets, searchQuery]);
 
+  const [movingTicketId, setMovingTicketId] = useState<string | null>(null);
+
   const handleMoveTicket = async (ticketId: string, newStatus: string) => {
+    setMovingTicketId(ticketId);
     try {
       await updateTicket(ticketId, { status: newStatus as Ticket['status'] });
       toast.success('Status updated');
     } catch {
       toast.error('Failed to update ticket status');
+    } finally {
+      setMovingTicketId(null);
     }
   };
 
@@ -351,6 +366,7 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
                   currentUser={currentUser}
                   priorityColors={priorityColors}
                   onMoveTicket={handleMoveTicket}
+                  movingTicketId={movingTicketId}
                 />
               ))}
             </div>

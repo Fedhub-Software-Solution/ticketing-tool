@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '../common/ui/select';
 import { toast } from 'sonner';
-import { User, Ticket } from '../../types';
+import { User, Ticket, EscalationRule } from '../../types';
 import { useTickets } from '@/app/hooks/useTickets';
 import {
   useGetTicketQuery,
@@ -123,9 +123,11 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     () => categories.filter((c: { parentId?: string }) => c.parentId === selectedCategory),
     [categories, selectedCategory]
   );
+  /** Criticality options from escalation_rules table; stored as ticket.priority in DB */
   const criticalityOptions = useMemo(() => {
-    const fromRules = [...new Set((escalationRules as { priority?: string }[]).map((r) => r.priority).filter(Boolean))];
-    const order = ['low', 'medium', 'high', 'urgent'];
+    const rules = escalationRules as EscalationRule[];
+    const fromRules = [...new Set(rules.map((r) => r.priority).filter(Boolean))];
+    const order: Array<'low' | 'medium' | 'high' | 'urgent'> = ['low', 'medium', 'high', 'urgent'];
     const ordered = order.filter((p) => fromRules.includes(p));
     return ordered.length ? ordered : order;
   }, [escalationRules]);
@@ -171,6 +173,13 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     const branchNames = branchesForZone.map((b) => b.name);
     if (selectedBranch && !branchNames.includes(selectedBranch)) setSelectedBranch(branchNames[0] ?? '');
   }, [zoneValue, branchesForZone, selectedBranch]);
+
+  // Keep criticality in sync with options from escalation table (e.g. when rules load)
+  useEffect(() => {
+    if (criticalityOptions.length && !criticalityOptions.includes(priorityValue as 'low' | 'medium' | 'high' | 'urgent')) {
+      setPriorityValue(criticalityOptions[0]);
+    }
+  }, [criticalityOptions, priorityValue]);
 
   useEffect(() => {
     syncedTicketIdRef.current = null;

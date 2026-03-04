@@ -21,6 +21,17 @@ const priorityColors: Record<string, string> = {
 export function getTicketTableColumns(): MRT_ColumnDef<Ticket>[] {
   return [
     {
+      accessorKey: 'ticketNumber',
+      header: 'TICKET #',
+      size: 100,
+      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+      Cell: ({ row }) => (
+        <span className="font-mono text-xs font-semibold text-slate-600 bg-slate-100/80 px-2 py-1 rounded border border-slate-200/50">
+          {row.original.ticketNumber ?? '—'}
+        </span>
+      ),
+    },
+    {
       accessorKey: 'title',
       header: 'TITLE',
       size: 220,

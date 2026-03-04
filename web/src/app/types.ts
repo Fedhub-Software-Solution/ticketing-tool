@@ -54,6 +54,8 @@ export interface Category {
 
 export interface Ticket {
   id: string;
+  /** Human-readable ticket number (e.g. TKT-001). From DB ticket_number. */
+  ticketNumber?: string | null;
   title: string;
   description: string;
   status: 'open' | 'in-progress' | 'on-hold' | 'resolved' | 'closed';

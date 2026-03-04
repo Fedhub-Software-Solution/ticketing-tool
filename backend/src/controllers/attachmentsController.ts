@@ -4,11 +4,17 @@ import path from 'path';
 import { pool } from '../db';
 import { config } from '../config';
 import { AuthRequest } from '../middleware';
+import { resolveTicketId } from './ticketsController';
 
 const UPLOAD_BASE = config.uploadDir;
 
 export async function listAttachments(req: AuthRequest, res: Response): Promise<void> {
-  const { id: ticketId } = req.params;
+  const { id } = req.params;
+  const ticketId = await resolveTicketId(id);
+  if (!ticketId) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
   const r = await pool.query(
     `SELECT id, ticket_id, file_name, file_size, file_type, uploaded_at
      FROM ticket_attachments WHERE ticket_id = $1 ORDER BY uploaded_at DESC`,
@@ -25,7 +31,12 @@ export async function listAttachments(req: AuthRequest, res: Response): Promise<
 }
 
 export async function uploadAttachment(req: AuthRequest, res: Response): Promise<void> {
-  const { id: ticketId } = req.params;
+  const { id } = req.params;
+  const ticketId = await resolveTicketId(id);
+  if (!ticketId) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
   const file = (req as any).file;
   if (!file) {
     res.status(400).json({ error: 'No file uploaded' });
@@ -51,7 +62,12 @@ export async function uploadAttachment(req: AuthRequest, res: Response): Promise
 }
 
 export async function deleteAttachment(req: AuthRequest, res: Response): Promise<void> {
-  const { id: ticketId, attachmentId } = req.params;
+  const { id, attachmentId } = req.params;
+  const ticketId = await resolveTicketId(id);
+  if (!ticketId) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
   const r = await pool.query(
     'SELECT file_path FROM ticket_attachments WHERE id = $1 AND ticket_id = $2',
     [attachmentId, ticketId]

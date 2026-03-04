@@ -172,8 +172,8 @@ export function MaterialReactTableCardListWrapper<T extends Record<string, any>>
       enableSorting: false,
       enableColumnActions: false,
       Cell: ({ row }) => (
-        <Card className="p-5 hover:shadow-md transition-all border-slate-200 group bg-white">
-          <div className="flex items-center justify-between">
+        <Card className={`p-5 hover:shadow-md transition-all border-slate-200 rounded-xl group ${row.index % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'}`}>
+          <div className="flex items-start justify-between gap-4">
             <div className="flex-1 flex items-center gap-6 min-w-0">
               {renderCardContent(row.original)}
             </div>
