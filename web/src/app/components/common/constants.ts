@@ -63,6 +63,15 @@ export const SLA_PRIORITY_COLORS: Record<SLAPriorityValue, string> = {
 /** Default SLA priority (medium). */
 export const SLA_DEFAULT_PRIORITY = SLA_PRIORITIES.find((p) => p.value === 'medium')!.value;
 
+/** Status (ticket_statuses.code) to dropdown item CSS. */
+export const STATUS_COLORS: Record<string, string> = {
+  open: 'font-bold text-indigo-600 bg-indigo-50/50 m-1 rounded-lg focus:bg-indigo-100',
+  'in-progress': 'font-bold text-violet-600 bg-violet-50/50 m-1 rounded-lg focus:bg-violet-100',
+  'on-hold': 'font-bold text-amber-600 bg-amber-50/50 m-1 rounded-lg focus:bg-amber-100',
+  resolved: 'font-bold text-emerald-600 bg-emerald-50/50 m-1 rounded-lg focus:bg-emerald-100',
+  closed: 'font-bold text-slate-600 bg-slate-100 m-1 rounded-lg focus:bg-slate-200',
+};
+
 /** Initial form state for create/edit SLA. */
 export const SLA_INITIAL_FORM = {
   name: '',

@@ -31,6 +31,15 @@ export interface SLA {
   category?: string;
 }
 
+export interface TicketStatus {
+  id: string;
+  code: string;
+  name: string;
+  displayOrder: number;
+  color?: string | null;
+  isActive: boolean;
+}
+
 export interface EscalationRule {
   id: string;
   name: string;

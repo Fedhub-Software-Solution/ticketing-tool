@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '../common/ui/select';
 import { toast } from 'sonner';
-import { User, Ticket, EscalationRule } from '../../types';
+import { User, Ticket, SLA, TicketStatus } from '../../types';
 import { useTickets } from '@/app/hooks/useTickets';
 import {
   useGetTicketQuery,
@@ -30,7 +30,10 @@ import { useGetCategoriesQuery } from '@/app/store/apis/categoriesApi';
 import { useGetUsersQuery } from '@/app/store/apis/usersApi';
 import { useGetZonesQuery } from '@/app/store/apis/zonesApi';
 import { useGetBranchesQuery } from '@/app/store/apis/branchesApi';
-import { useGetEscalationRulesQuery } from '@/app/store/apis/escalationRulesApi';
+import { useGetSLAsQuery } from '@/app/store/apis/slasApi';
+import { useGetTicketStatusesQuery } from '@/app/store/apis/ticketStatusesApi';
+import { SLA_PRIORITY_COLORS, STATUS_COLORS } from '@/app/components/common/constants';
+import type { SLAPriorityValue } from '@/app/components/common/constants';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CreateTicketProps {
@@ -48,13 +51,6 @@ interface Comment {
   timestamp: string;
   isCurrentUser: boolean;
 }
-
-const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Low Priority',
-  medium: 'Medium Priority',
-  high: 'High Priority',
-  urgent: 'Urgent Response',
-};
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -96,7 +92,8 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
   const { data: users = [] } = useGetUsersQuery(undefined, { skip: currentUser.role === 'customer' });
   const { data: zones = [] } = useGetZonesQuery();
   const { data: branches = [] } = useGetBranchesQuery();
-  const { data: escalationRules = [] } = useGetEscalationRulesQuery();
+  const { data: slas = [] } = useGetSLAsQuery();
+  const { data: ticketStatuses = [] } = useGetTicketStatusesQuery();
 
   const [selectedBranch, setSelectedBranch] = useState<string>(ticket?.branch || '');
   const [selectedCategory, setSelectedCategory] = useState<string>(
@@ -115,6 +112,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
   const [titleValue, setTitleValue] = useState(ticket?.title || '');
   const [descriptionValue, setDescriptionValue] = useState(ticket?.description || '');
   const [priorityValue, setPriorityValue] = useState(ticket?.priority || 'medium');
+  const [selectedSlaId, setSelectedSlaId] = useState<string>(ticket?.slaId ?? '');
   const [assignedToValue, setAssignedToValue] = useState(ticket?.assignedTo || 'unassigned');
   const [zoneValue, setZoneValue] = useState(ticket?.zone || currentUser.zone || '');
 
@@ -123,14 +121,15 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     () => categories.filter((c: { parentId?: string }) => c.parentId === selectedCategory),
     [categories, selectedCategory]
   );
-  /** Criticality options from escalation_rules table; stored as ticket.priority in DB */
+  /** Criticality dropdown: list of SLAs (show SLA name); selection sets ticket.priority + ticket.slaId */
   const criticalityOptions = useMemo(() => {
-    const rules = escalationRules as EscalationRule[];
-    const fromRules = [...new Set(rules.map((r) => r.priority).filter(Boolean))];
+    const list = (slas as SLA[]).slice();
     const order: Array<'low' | 'medium' | 'high' | 'urgent'> = ['low', 'medium', 'high', 'urgent'];
-    const ordered = order.filter((p) => fromRules.includes(p));
-    return ordered.length ? ordered : order;
-  }, [escalationRules]);
+    list.sort((a, b) => order.indexOf(a.priority) - order.indexOf(b.priority));
+    return list;
+  }, [slas]);
+  /** Status options from ticket_statuses table (for Current Status dropdown) */
+  const statusOptions = useMemo(() => (ticketStatuses as TicketStatus[]).slice(), [ticketStatuses]);
   const selectedZoneId = useMemo(() => (zones as { id: string; name: string }[]).find((z) => z.name === zoneValue)?.id ?? null, [zones, zoneValue]);
   const branchesForZone = useMemo(
     () => (branches as { id: string; name: string; zoneId: string; code?: string }[]).filter((b) => b.zoneId === selectedZoneId),
@@ -174,12 +173,41 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     if (selectedBranch && !branchNames.includes(selectedBranch)) setSelectedBranch(branchNames[0] ?? '');
   }, [zoneValue, branchesForZone, selectedBranch]);
 
-  // Keep criticality in sync with options from escalation table (e.g. when rules load)
+  // When SLAs load: ensure a SLA is selected (first by priority order); keep priority in sync
   useEffect(() => {
-    if (criticalityOptions.length && !criticalityOptions.includes(priorityValue as 'low' | 'medium' | 'high' | 'urgent')) {
-      setPriorityValue(criticalityOptions[0]);
+    if (!criticalityOptions.length) return;
+    const first = criticalityOptions[0];
+    const currentInList = criticalityOptions.some((s) => s.id === selectedSlaId);
+    if (!currentInList) {
+      setSelectedSlaId(first.id);
+      setPriorityValue(first.priority);
     }
-  }, [criticalityOptions, priorityValue]);
+  }, [criticalityOptions, selectedSlaId]);
+
+  // When editing: if ticket has slaId or priority, sync selectedSlaId (e.g. after slas load)
+  useEffect(() => {
+    if (!ticket?.id || !isEditing || !criticalityOptions.length) return;
+    if (ticket.slaId && criticalityOptions.some((s) => s.id === ticket.slaId)) {
+      setSelectedSlaId(ticket.slaId);
+      const s = criticalityOptions.find((x) => x.id === ticket.slaId);
+      if (s) setPriorityValue(s.priority);
+      return;
+    }
+    if (ticket.priority && !ticket.slaId) {
+      const match = criticalityOptions.find((s) => s.priority === ticket.priority);
+      if (match) {
+        setSelectedSlaId(match.id);
+        setPriorityValue(match.priority);
+      }
+    }
+  }, [ticket?.id, ticket?.slaId, ticket?.priority, isEditing, criticalityOptions]);
+
+  // When status options load from DB, ensure selected value exists in list
+  useEffect(() => {
+    if (!statusOptions.length) return;
+    const codes = statusOptions.map((s) => s.code);
+    if (!codes.includes(statusValue)) setStatusValue(statusOptions[0].code);
+  }, [statusOptions, statusValue]);
 
   useEffect(() => {
     syncedTicketIdRef.current = null;
@@ -218,6 +246,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
         description: descriptionValue,
         status: statusValue as any,
         priority: priorityValue as any,
+        slaId: selectedSlaId || undefined,
         category: categories.find((c: { id: string; name: string }) => c.id === selectedCategory)?.name || 'General',
         categoryId: selectedCategory || undefined,
         subCategory: selectedSubCategory === 'none' ? undefined : selectedSubCategory,
@@ -641,14 +670,18 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       </Label>
                       <Select value={statusValue} onValueChange={setStatusValue}>
                         <SelectTrigger className="h-11 border-slate-200 rounded-xl font-semibold capitalize bg-slate-50/50">
-                          <SelectValue />
+                          <SelectValue placeholder="Select status" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
-                          <SelectItem value="open" className="font-bold text-indigo-600 bg-indigo-50/50 m-1 rounded-lg focus:bg-indigo-100">Open</SelectItem>
-                          <SelectItem value="in-progress" className="font-bold text-violet-600 bg-violet-50/50 m-1 rounded-lg focus:bg-violet-100">In Progress</SelectItem>
-                          <SelectItem value="on-hold" className="font-bold text-amber-600 bg-amber-50/50 m-1 rounded-lg focus:bg-amber-100">On Hold</SelectItem>
-                          <SelectItem value="resolved" className="font-bold text-emerald-600 bg-emerald-50/50 m-1 rounded-lg focus:bg-emerald-100">Resolved</SelectItem>
-                          <SelectItem value="closed" className="font-bold text-slate-600 bg-slate-100 m-1 rounded-lg focus:bg-slate-200">Closed</SelectItem>
+                          {statusOptions.map((s) => (
+                            <SelectItem
+                              key={s.id}
+                              value={s.code}
+                              className={STATUS_COLORS[s.code] ?? 'font-medium text-slate-700 bg-slate-50 m-1 rounded-lg focus:bg-slate-100'}
+                            >
+                              {s.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -658,18 +691,27 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                         Criticality
                         <AlertCircle className="w-3 h-3" />
                       </Label>
-                      <Select value={priorityValue} onValueChange={setPriorityValue}>
+                      <Select
+                        value={selectedSlaId || undefined}
+                        onValueChange={(id) => {
+                          const s = criticalityOptions.find((x) => x.id === id);
+                          if (s) {
+                            setSelectedSlaId(s.id);
+                            setPriorityValue(s.priority);
+                          }
+                        }}
+                      >
                         <SelectTrigger className="h-11 border-slate-200 rounded-xl font-semibold capitalize bg-slate-50/50">
                           <SelectValue placeholder="Select criticality" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
-                          {criticalityOptions.map((p) => (
+                          {criticalityOptions.map((sla) => (
                             <SelectItem
-                              key={p}
-                              value={p}
-                              className={`font-bold py-2.5 ${p === 'low' ? 'text-blue-600 focus:bg-blue-50' : p === 'medium' ? 'text-amber-600 focus:bg-amber-50' : p === 'high' ? 'text-orange-600 focus:bg-orange-50' : 'text-rose-600 focus:bg-rose-50'}`}
+                              key={sla.id}
+                              value={sla.id}
+                              className={`font-bold py-2.5 border ${SLA_PRIORITY_COLORS[sla.priority as SLAPriorityValue] ?? 'bg-slate-100 text-slate-700 border-slate-200'} focus:opacity-90`}
                             >
-                              {PRIORITY_LABELS[p] ?? p}
+                              {sla.name}
                             </SelectItem>
                           ))}
                         </SelectContent>

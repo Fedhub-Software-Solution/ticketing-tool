@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { MRT_Row } from 'material-react-table';
 import { User as UserType, Ticket } from '@/app/types';
-import { Search, Filter, List, Table, MapPin, Edit2, Globe, Tag, User, GitBranch, Clock, AlertTriangle } from 'lucide-react';
+import { Search, Filter, List, Table, MapPin, Edit2, Trash2, Globe, Tag, User, GitBranch, Clock, AlertTriangle } from 'lucide-react';
 import { Button } from '../common/ui/button';
 import { Card } from '../common/ui/card';
 import { Badge } from '../common/ui/badge';
@@ -15,6 +15,7 @@ import {
 } from '../common/ui/select';
 import { useTickets } from '@/app/hooks/useTickets';
 import { format } from 'date-fns';
+import { toast } from 'sonner';
 import { useGetCategoriesQuery } from '@/app/store/apis/categoriesApi';
 import { useGetZonesQuery } from '@/app/store/apis/zonesApi';
 import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
@@ -36,13 +37,25 @@ interface MyOverdueTicketsProps {
 
 export function MyOverdueTickets({ onViewTicket, onTrackTicket, currentUser }: MyOverdueTicketsProps) {
   const { data: zones = [] } = useGetZonesQuery();
-  const { tickets, isLoading, isError } = useTickets();
+  const { tickets, deleteTicket, isLoading, isError } = useTickets();
   const { data: categories = [] } = useGetCategoriesQuery();
   const [searchQuery, setSearchQuery] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [zoneFilter, setZoneFilter] = useState<string>('all');
   const [viewMode, setViewMode] = useState<'list' | 'table'>('table');
+
+  const handleDeleteTicket = async (ticketId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm('Are you sure you want to delete this ticket? This action cannot be undone.')) {
+      try {
+        await deleteTicket(ticketId);
+        toast.success('Ticket deleted successfully');
+      } catch {
+        toast.error('Failed to delete ticket');
+      }
+    }
+  };
 
   const zoneList = useMemo(() => zones as { id: string; name: string }[], [zones]);
   const userZoneName = useMemo(
@@ -180,30 +193,46 @@ export function MyOverdueTickets({ onViewTicket, onTrackTicket, currentUser }: M
               }
               errorMessage="Failed to load overdue tickets. Check that the API is running and you are logged in."
               renderCardContent={(ticket) => (
-                <>
-                  <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
-                    <span className="font-mono text-slate-500">#{ticket.id}</span>
-                    <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
-                    <Badge className="bg-rose-50 text-rose-700 border-rose-100 flex items-center gap-1 font-bold">
-                      <Clock className="w-3 h-3" /> Overdue
-                    </Badge>
-                    {ticket.zone && (
-                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 flex items-center gap-1">
-                        <Globe className="w-3 h-3" /> {ticket.zone}
+                <div className="flex flex-col min-w-0 w-full">
+                  <div className="flex items-start gap-2 mb-3 flex-wrap">
+                    <span className="font-bold text-slate-800 text-sm shrink-0">
+                      #{ticket.ticketNumber ?? ticket.id}
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <Badge className={`${priorityColors[ticket.priority]} text-xs`}>{ticket.priority}</Badge>
+                      <Badge className="bg-rose-500 text-white border-rose-600 text-xs flex items-center gap-1 font-semibold">
+                        <Clock className="w-3 h-3" /> Overdue
                       </Badge>
-                    )}
+                      <Badge variant="outline" className="text-xs bg-slate-100 text-slate-700 border-slate-200">
+                        {ticket.category}
+                      </Badge>
+                      {ticket.zone && (
+                        <Badge variant="outline" className="text-xs bg-blue-100 text-blue-700 border-blue-200 flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> {ticket.zone}
+                        </Badge>
+                      )}
+                      {ticket.branch && (
+                        <Badge variant="outline" className="text-xs bg-blue-100 text-blue-700 border-blue-200 flex items-center gap-1">
+                          <GitBranch className="w-3 h-3" /> {ticket.branch}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <h3 className="font-bold text-slate-900 mb-1">{ticket.title}</h3>
-                  <p className="text-sm text-slate-500 line-clamp-1">{ticket.description}</p>
-                  <div className="flex items-center gap-4 mt-4 text-[10px] text-slate-400 font-medium">
-                    <span className="flex items-center gap-1 text-rose-600 font-bold">
-                      <AlertTriangle className="w-3 h-3" /> Due: {ticket.slaDueDate ? format(new Date(ticket.slaDueDate), 'MMM dd, yyyy HH:mm') : 'N/A'}
+                  <h3 className="font-bold text-slate-900 text-base mb-1.5 leading-tight">
+                    {ticket.title}
+                  </h3>
+                  <p className="text-sm text-slate-500 line-clamp-2 mb-4">
+                    {ticket.description || '—'}
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-slate-500 font-medium mt-auto">
+                    <span className="flex items-center gap-1.5">
+                      <User className="w-3.5 h-3.5 text-slate-400" /> {ticket.assignedTo ?? '—'}
                     </span>
-                    <span className="flex items-center gap-1">
-                      <User className="w-3 h-3" /> {ticket.assignedTo}
+                    <span className="flex items-center gap-1.5 text-rose-600 font-semibold">
+                      <AlertTriangle className="w-3.5 h-3.5" /> Due: {ticket.slaDueDate ? format(new Date(ticket.slaDueDate), 'MMM dd, yyyy HH:mm') : 'N/A'}
                     </span>
                   </div>
-                </>
+                </div>
               )}
               renderRowActions={({ row }) => (
                 <div className="flex gap-1">
@@ -212,6 +241,9 @@ export function MyOverdueTickets({ onViewTicket, onTrackTicket, currentUser }: M
                   </Button>
                   <Button variant="ghost" size="icon" onClick={() => onTrackTicket(row.original.id)}>
                     <MapPin className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="hover:text-rose-600 hover:bg-rose-50" onClick={(e) => handleDeleteTicket(row.original.id, e)}>
+                    <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
               )}
@@ -242,6 +274,9 @@ export function MyOverdueTickets({ onViewTicket, onTrackTicket, currentUser }: M
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200" onClick={() => onTrackTicket(row.original.id)}>
                     <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white hover:shadow-sm border border-transparent hover:border-slate-200 hover:text-rose-600" onClick={(e) => handleDeleteTicket(row.original.id, e)}>
+                    <Trash2 className="w-3.5 h-3.5 text-slate-400" />
                   </Button>
                 </div>
               )}

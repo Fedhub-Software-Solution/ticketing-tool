@@ -72,6 +72,43 @@ async function resolveBranchId(branchNameOrCode: string | undefined, zoneId: str
   return r.rows[0]?.id ?? null;
 }
 
+/** Get resolution time in minutes for SLA due calculation. Prefer slaId; fallback to first SLA for priority. */
+async function getSlaResolutionMinutes(slaId: string | null, priority: string | null): Promise<number | null> {
+  if (slaId) {
+    const r = await pool.query('SELECT resolution_time_mins FROM slas WHERE id = $1', [slaId]);
+    const mins = r.rows[0]?.resolution_time_mins;
+    return typeof mins === 'number' ? mins : null;
+  }
+  if (priority) {
+    const r = await pool.query(
+      'SELECT resolution_time_mins FROM slas WHERE priority = $1 ORDER BY created_at ASC LIMIT 1',
+      [priority]
+    );
+    const mins = r.rows[0]?.resolution_time_mins;
+    return typeof mins === 'number' ? mins : null;
+  }
+  return null;
+}
+
+/** Compute SLA due date from a base timestamp and resolution minutes. */
+function addMinutes(isoOrDate: string | Date, minutes: number): Date {
+  const d = new Date(isoOrDate);
+  d.setMinutes(d.getMinutes() + minutes);
+  return d;
+}
+
+/** If ticket has no sla_due_date but has SLA (sla_id or priority), compute and optionally persist. Mutates row. */
+async function ensureSlaDueDate(row: any, persist: boolean): Promise<void> {
+  if (row.sla_due_date != null) return;
+  const mins = await getSlaResolutionMinutes(row.sla_id ?? null, row.priority ?? null);
+  if (mins == null || mins < 0) return;
+  const due = addMinutes(row.created_at, mins);
+  row.sla_due_date = due;
+  if (persist && row.id) {
+    await pool.query('UPDATE tickets SET sla_due_date = $1 WHERE id = $2', [due, row.id]);
+  }
+}
+
 export async function listTickets(req: AuthRequest, res: Response): Promise<void> {
   const { status, priority, zone, assignedTo, limit = '50', offset = '0' } = req.query;
   let sql = `
@@ -111,6 +148,9 @@ export async function listTickets(req: AuthRequest, res: Response): Promise<void
   params.push(parseInt(limit as string, 10) || 50, parseInt(offset as string, 10) || 0);
 
   const r = await pool.query(sql, params);
+  for (const row of r.rows) {
+    await ensureSlaDueDate(row, true);
+  }
   res.json(r.rows.map(toTicket));
 }
 
@@ -140,6 +180,7 @@ export async function getTicket(req: AuthRequest, res: Response): Promise<void> 
     res.status(404).json({ error: 'Ticket not found' });
     return;
   }
+  await ensureSlaDueDate(row, true);
   res.json(toTicket(row));
 }
 
@@ -198,6 +239,12 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
     ]
   );
   const row = r.rows[0];
+  // Set SLA due date from SLA resolution time (slaId or priority)
+  const resolutionMins = await getSlaResolutionMinutes(slaId || null, priority || null);
+  if (resolutionMins != null && resolutionMins >= 0) {
+    const dueDate = addMinutes(row.created_at, resolutionMins);
+    await pool.query('UPDATE tickets SET sla_due_date = $1 WHERE id = $2', [dueDate, row.id]);
+  }
   const full = await pool.query(
     `SELECT t.*, c.name AS category_name, z.name AS zone_name, b.name AS branch_name,
             u1.name AS assigned_to_name, u2.name AS created_by_name, u2.email AS created_by_email, '{}' AS child_ids
@@ -344,6 +391,19 @@ export async function updateTicket(req: AuthRequest, res: Response): Promise<voi
     tags: tags != null ? (Array.isArray(tags) ? tags : [tags]) : undefined,
     parent_id: parentId,
   };
+  // Recompute SLA due date when SLA or priority changes (from ticket created_at + SLA resolution time)
+  if (slaId !== undefined || priority !== undefined) {
+    const cur = await pool.query('SELECT created_at, sla_id, priority FROM tickets WHERE id = $1', [id]);
+    const ticketRow = cur.rows[0];
+    if (ticketRow) {
+      const effSlaId = slaId !== undefined ? slaId : ticketRow.sla_id;
+      const effPriority = priority !== undefined ? priority : ticketRow.priority;
+      const resolutionMins = await getSlaResolutionMinutes(effSlaId, effPriority);
+      if (resolutionMins != null && resolutionMins >= 0) {
+        map.sla_due_date = addMinutes(ticketRow.created_at, resolutionMins);
+      }
+    }
+  }
   for (const [key, val] of Object.entries(map)) {
     if (val !== undefined) {
       updates.push(`${key} = $${i++}`);
