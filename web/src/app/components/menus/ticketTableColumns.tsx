@@ -1,7 +1,6 @@
 import type { MRT_ColumnDef } from 'material-react-table';
 import { Badge } from '@/app/components/common/ui/badge';
 import type { Ticket } from '@/app/types';
-import { format } from 'date-fns';
 import { Globe, GitBranch } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
@@ -21,17 +20,6 @@ const priorityColors: Record<string, string> = {
 
 export function getTicketTableColumns(): MRT_ColumnDef<Ticket>[] {
   return [
-    {
-      accessorKey: 'id',
-      header: 'ID',
-      size: 100,
-      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
-      Cell: ({ row }) => (
-        <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/50">
-          #{row.original.id}
-        </span>
-      ),
-    },
     {
       accessorKey: 'title',
       header: 'TITLE',
@@ -115,68 +103,6 @@ export function getTicketTableColumns(): MRT_ColumnDef<Ticket>[] {
           <span className="text-sm font-medium text-slate-700">{row.original.assignedTo ?? '—'}</span>
         </div>
       ),
-    },
-    {
-      accessorKey: 'category',
-      header: 'CATEGORY',
-      size: 120,
-      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
-      Cell: ({ row }) => (
-        <span className="text-xs font-semibold text-slate-600 bg-slate-100/50 px-2 py-1 rounded border border-slate-200/50">
-          {row.original.category ?? '—'}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'subCategory',
-      header: 'SUB CATEGORY',
-      size: 120,
-      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
-      Cell: ({ row }) => (
-        <span className="text-xs text-slate-500 italic px-2 py-1 bg-slate-50/50 rounded border border-slate-200/30">
-          {row.original.subCategory ?? '—'}
-        </span>
-      ),
-    },
-    {
-      accessorKey: 'updatedAt',
-      header: 'UPDATED DATE',
-      size: 120,
-      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
-      Cell: ({ row }) => (
-        <div className="flex flex-col">
-          <span className="text-xs font-bold text-slate-600">
-            {row.original.updatedAt ? format(new Date(row.original.updatedAt), 'dd/MM/yyyy') : '—'}
-          </span>
-          <span className="text-[10px] text-slate-400">
-            {row.original.updatedAt ? format(new Date(row.original.updatedAt), 'HH:mm') : ''}
-          </span>
-        </div>
-      ),
-    },
-    {
-      accessorKey: 'slaDueDate',
-      header: 'SLA DUE',
-      size: 120,
-      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
-      Cell: ({ row }) => {
-        const due = row.original.slaDueDate;
-        const isPast = due ? new Date(due) < new Date() : false;
-        return (
-          <div className="flex flex-col">
-            {due ? (
-              <>
-                <span className={`text-xs font-bold ${isPast ? 'text-rose-600' : 'text-slate-600'}`}>
-                  {format(new Date(due), 'dd/MM/yyyy')}
-                </span>
-                <span className="text-[10px] text-slate-400">{format(new Date(due), 'HH:mm')}</span>
-              </>
-            ) : (
-              '—'
-            )}
-          </div>
-        );
-      },
     },
   ];
 }

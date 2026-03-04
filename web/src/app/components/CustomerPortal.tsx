@@ -10,16 +10,18 @@ import { QRCodeSVG } from 'qrcode.react';
 
 import { Badge } from './common/ui/badge';
 import { InputOTP, InputOTPGroup, InputOTPSlot } from './common/ui/input-otp';
-import { useLoginMutation } from '@/app/store/apis/authApi';
+import type { User } from '@/app/types';
+import { useLoginMutation, useRegisterMutation } from '@/app/store/apis/authApi';
 
 interface CustomerPortalProps {
   onBack: () => void;
-  onLogin: (email: string, pass: string) => void;
+  onLogin: (user: User) => void;
   autoShowQR?: boolean;
 }
 
 export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: CustomerPortalProps) {
   const [login] = useLoginMutation();
+  const [registerUser, { isLoading: isRegistering }] = useRegisterMutation();
   const [mode, setMode] = useState<'landing' | 'register' | 'login' | 'otp'>('landing');
   const [showQR, setShowQR] = useState(autoShowQR);
   const [generatedOtp, setGeneratedOtp] = useState('');
@@ -37,33 +39,34 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
   const [registrationUrl, setRegistrationUrl] = useState('');
 
   useEffect(() => {
-    // In a real app, this would be the actual production URL
     setRegistrationUrl(window.location.href);
   }, []);
 
-  const handleRegister = (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Generate a random 6-digit OTP
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    setGeneratedOtp(otp);
-    setLastEmailContent({ to: 'aravindraj.n@fedhubsoftware.com', code: otp });
-    
-    toast.success('Email Simulation Triggered', {
-      description: `A simulated verification code has been generated. Check the "Demo Inbox" popup.`
-    });
-    
-    // Show the demo inbox after a short delay to simulate "receiving"
-    setTimeout(() => {
-      setShowDemoInbox(true);
-    }, 1000);
-    
-    setMode('otp');
+    try {
+      const res = await registerUser({
+        name: formData.name.trim(),
+        email: formData.email.trim(),
+        password: formData.password,
+        role: 'customer',
+        companyName: formData.company.trim() || undefined,
+        phoneNumber: formData.phone.trim() || undefined,
+      }).unwrap();
+      toast.success('Account created successfully', {
+        description: 'You can now sign in with your email and password.',
+      });
+      setMode('login');
+      setFormData((prev) => ({ ...prev, password: '' }));
+      onLogin(res.user);
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string } };
+      toast.error(e?.data?.error ?? 'Registration failed. Please try again.');
+    }
   };
 
   const handleVerifyOTP = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (otpValue === generatedOtp) {
       toast.success('Registration successful!', {
         description: 'Your account has been verified and created. You can now log in.'
@@ -80,7 +83,7 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
     e.preventDefault();
     try {
       const res = await login({ email: formData.email, password: formData.password }).unwrap();
-      onLogin(res.user.email, formData.password);
+      onLogin(res.user);
       toast.success('Welcome back!');
     } catch {
       toast.error('Invalid credentials');
@@ -364,8 +367,8 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
                       </div>
                     </div>
 
-                    <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 h-11">
-                      {mode === 'register' ? 'Create Account' : 'Sign In'}
+                    <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 h-11" disabled={mode === 'register' && isRegistering}>
+                      {mode === 'register' ? (isRegistering ? 'Creating…' : 'Create Account') : 'Sign In'}
                     </Button>
                   </form>
 

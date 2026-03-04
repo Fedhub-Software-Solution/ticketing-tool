@@ -49,25 +49,54 @@ export async function login(req: AuthRequest, res: Response): Promise<void> {
 }
 
 export async function register(req: AuthRequest, res: Response): Promise<void> {
-  const { name, email, password, role = 'customer' } = req.body;
-  if (!name || !email || !password) {
+  const {
+    name,
+    fullName,
+    email,
+    workEmail,
+    password,
+    role = 'customer',
+    companyName,
+    company_name,
+    phoneNumber,
+    phone_number,
+  } = req.body;
+  const displayName = (name || fullName || '').trim();
+  const emailVal = (email || workEmail || '').trim().toLowerCase();
+  const company = (companyName ?? company_name ?? '').trim() || null;
+  const phone = (phoneNumber ?? phone_number ?? '').trim() || null;
+
+  if (!displayName || !emailVal || !password) {
     res.status(400).json({ error: 'Name, email and password required' });
     return;
   }
+  if (String(password).length < 6) {
+    res.status(400).json({ error: 'Password must be at least 6 characters' });
+    return;
+  }
+
   const hash = await bcrypt.hash(password, 10);
-  // created_by left NULL = self-registered (not created by an admin)
-  const r = await pool.query(
-    `INSERT INTO users (name, email, password_hash, role, created_by) VALUES ($1, $2, $3, $4, NULL)
-     RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status`,
-    [name, email, hash, role]
-  );
-  const row = r.rows[0];
-  const token = jwt.sign(
-    { userId: row.id, email: row.email, role: row.role },
-    config.jwtSecret,
-    { expiresIn: config.jwtExpiresIn } as SignOptions
-  );
-  res.status(201).json({ user: toUserResponse(row), token });
+  try {
+    const r = await pool.query(
+      `INSERT INTO users (name, email, password_hash, role, created_by, company_name, phone_number)
+       VALUES ($1, $2, $3, $4, NULL, $5, $6)
+       RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status`,
+      [displayName, emailVal, hash, role, company, phone]
+    );
+    const row = r.rows[0];
+    const token = jwt.sign(
+      { userId: row.id, email: row.email, role: row.role },
+      config.jwtSecret,
+      { expiresIn: config.jwtExpiresIn } as SignOptions
+    );
+    res.status(201).json({ user: toUserResponse(row), token });
+  } catch (err: any) {
+    if (err.code === '23505') {
+      res.status(400).json({ error: 'An account with this email already exists' });
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function me(req: AuthRequest, res: Response): Promise<void> {

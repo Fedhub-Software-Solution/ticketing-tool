@@ -61,12 +61,12 @@ export function SystemUsersTab({ isActive }: SystemUsersTabProps) {
         email: editingUser.email,
         password: '',
         role: getRoleCodeForEnum(editingUser.role, rolesFromApi),
-        zone: editingUser.zone || '',
-        branch: editingUser.branch || '',
-        location: editingUser.location || '',
+        zone: editingUser.zone ?? '',
+        branch: editingUser.branch ?? '',
+        location: editingUser.location ?? '',
         status: editingUser.status,
       });
-    } else {
+    } else if (!isAddUserOpen) {
       setFormData(EMPTY_USER_FORM);
     }
   }, [editingUser, isAddUserOpen, rolesFromApi]);
@@ -90,6 +90,18 @@ export function SystemUsersTab({ isActive }: SystemUsersTabProps) {
   );
 
   const handleEditClick = (user: User) => {
+    const nameParts = user.name.split(' ');
+    setFormData({
+      firstName: nameParts[0] || '',
+      lastName: nameParts.slice(1).join(' ') || '',
+      email: user.email,
+      password: '',
+      role: getRoleCodeForEnum(user.role, rolesFromApi),
+      zone: user.zone ?? '',
+      branch: user.branch ?? '',
+      location: user.location ?? '',
+      status: user.status,
+    });
     setEditingUser(user);
     setIsAddUserOpen(true);
   };

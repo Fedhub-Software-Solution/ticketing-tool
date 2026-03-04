@@ -126,7 +126,7 @@ function AppContent() {
       return (
         <CustomerPortal
           onBack={() => setIsCustomerPortal(false)}
-          onLogin={() => {}}
+          onLogin={handleLogin}
           autoShowQR={true}
         />
       );

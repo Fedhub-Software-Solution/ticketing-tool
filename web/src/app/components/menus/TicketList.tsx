@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { MRT_Row } from 'material-react-table';
-import { Search, Filter, List, Table, MapPin, Edit2, Trash2, Globe, Tag, User, GitBranch, Clock } from 'lucide-react';
+import { Search, Filter, List, Table, MapPin, Edit2, Trash2, Globe, Tag, User, GitBranch, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { format } from 'date-fns';
 import { Card } from '../common/ui/card';
 import { Button } from '../common/ui/button';
 import { Badge } from '../common/ui/badge';
@@ -20,6 +21,7 @@ import { useTickets } from '@/app/hooks/useTickets';
 import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
 import { MaterialReactTableCardListWrapper } from '@/app/components/common/mrt/MaterialReactTableCardListWrapper';
 import { getTicketTableColumns } from './ticketTableColumns';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../common/ui/collapsible';
 
 interface TicketListProps {
   onViewTicket: (ticketId: string, edit?: boolean) => void;
@@ -35,6 +37,98 @@ interface TicketListProps {
 type ViewMode = 'list' | 'table';
 type SortField = keyof Ticket;
 type SortDirection = 'asc' | 'desc';
+
+function DetailItem({
+  label,
+  value,
+  mono,
+  className,
+  valueClassName,
+}: { label: string; value: string; mono?: boolean; className?: string; valueClassName?: string }) {
+  return (
+    <div className={className}>
+      <span className="text-slate-500 font-medium block mb-0.5">{label}</span>
+      <span className={`text-slate-800 ${mono ? 'font-mono text-xs' : ''} ${valueClassName ?? ''}`}>{value}</span>
+    </div>
+  );
+}
+
+function TicketListCardContent({ ticket }: { ticket: Ticket }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const slaPast = ticket.slaDueDate ? new Date(ticket.slaDueDate) < new Date() : false;
+  return (
+    <div className="w-full min-w-0">
+      <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
+        <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
+        <Badge className={statusColors[ticket.status]}>{ticket.status.replace('-', ' ')}</Badge>
+        <Badge variant="outline">{ticket.category}</Badge>
+        {ticket.subCategory && <Badge variant="outline" className="bg-slate-50 border-slate-200">{ticket.subCategory}</Badge>}
+        {ticket.zone && (
+          <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 flex items-center gap-1">
+            <Globe className="w-3 h-3" /> {ticket.zone}
+          </Badge>
+        )}
+        {ticket.branch && (
+          <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-100 flex items-center gap-1">
+            <GitBranch className="w-3 h-3" /> {ticket.branch}
+          </Badge>
+        )}
+      </div>
+      <h3 className="font-bold text-slate-900 mb-1">{ticket.title}</h3>
+      <p className="text-sm text-slate-500 line-clamp-1">{ticket.description}</p>
+      <div className="flex items-center gap-4 mt-4 text-[10px] text-slate-400 font-medium">
+        <span className="flex items-center gap-1"><User className="w-3 h-3" /> {ticket.assignedTo ?? '—'}</span>
+        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}</span>
+      </div>
+      <Collapsible open={detailsOpen} onOpenChange={setDetailsOpen} className="mt-4">
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700 -ml-2 h-8 gap-1">
+            {detailsOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            <span>{detailsOpen ? 'Hide details' : 'Show all details'}</span>
+          </Button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="pt-4 mt-4 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
+            <DetailItem label="ID" value={`#${ticket.id}`} mono />
+            <DetailItem label="Title" value={ticket.title} />
+            <DetailItem label="Description" value={ticket.description || '—'} className="sm:col-span-2 lg:col-span-3" />
+            <DetailItem label="Status" value={(ticket.status as string).replace('-', ' ')} />
+            <DetailItem label="Priority" value={ticket.priority} />
+            <DetailItem label="Category" value={ticket.category ?? '—'} />
+            <DetailItem label="Sub category" value={ticket.subCategory ?? '—'} />
+            <DetailItem label="Zone" value={ticket.zone ?? '—'} />
+            <DetailItem label="Branch" value={ticket.branch ?? '—'} />
+            <DetailItem label="Location" value={ticket.location ?? '—'} />
+            <DetailItem label="Assigned to" value={ticket.assignedTo ?? '—'} />
+            <DetailItem label="Created by" value={ticket.createdBy ?? '—'} />
+            <DetailItem label="Created" value={ticket.createdAt ? format(new Date(ticket.createdAt), 'dd/MM/yyyy HH:mm') : '—'} />
+            <DetailItem label="Updated" value={ticket.updatedAt ? format(new Date(ticket.updatedAt), 'dd/MM/yyyy HH:mm') : '—'} />
+            <DetailItem
+              label="SLA due"
+              value={ticket.slaDueDate ? format(new Date(ticket.slaDueDate), 'dd/MM/yyyy HH:mm') : '—'}
+              valueClassName={slaPast ? 'text-rose-600 font-semibold' : undefined}
+            />
+            {ticket.escalationLevel != null && (
+              <DetailItem label="Escalation level" value={String(ticket.escalationLevel)} />
+            )}
+            {ticket.escalatedTo && <DetailItem label="Escalated to" value={ticket.escalatedTo} />}
+            {ticket.breachedSLA != null && (
+              <DetailItem label="SLA breached" value={ticket.breachedSLA ? 'Yes' : 'No'} valueClassName={ticket.breachedSLA ? 'text-rose-600' : undefined} />
+            )}
+            {ticket.tags?.length ? (
+              <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-1.5 items-center">
+                <span className="text-slate-500 font-medium">Tags:</span>
+                {ticket.tags.map((tag) => (
+                  <Badge key={tag} variant="outline" className="text-xs bg-slate-100 border-slate-200">{tag}</Badge>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+    </div>
+  );
+}
 
 const priorityColors: Record<string, string> = {
   urgent: 'bg-rose-50 text-rose-700 border-rose-100 font-semibold',
@@ -233,7 +327,8 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
 
       <div className="flex-1 overflow-y-auto p-8">
         {viewMode === 'list' ? (
-          <Card className="overflow-hidden border-slate-200 shadow-sm rounded-xl">
+          <div className="">
+          <Card className="overflow-hidden px-4 border-slate-200 shadow-sm rounded-xl">
             <MaterialReactTableCardListWrapper<Ticket>
               data={filteredTickets}
               isLoading={isLoading}
@@ -247,29 +342,7 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
                   : 'No tickets match your filters. Try adjusting search or filters.'
               }
               errorMessage="Failed to load tickets. Check that the API is running and you are logged in."
-              renderCardContent={(ticket) => (
-                <>
-                  <div className="flex items-center gap-2 mb-2 flex-wrap text-xs">
-                    <span className="font-mono text-slate-500">{ticket.id}</span>
-                    <Badge className={priorityColors[ticket.priority]}>{ticket.priority}</Badge>
-                    <Badge className={statusColors[ticket.status]}>{ticket.status.replace('-', ' ')}</Badge>
-                    <Badge variant="outline">{ticket.category}</Badge>
-                    {ticket.subCategory && <Badge variant="outline" className="bg-slate-50 border-slate-200">{ticket.subCategory}</Badge>}
-                    <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 flex items-center gap-1">
-                      <Globe className="w-3 h-3" /> {ticket.zone}
-                    </Badge>
-                    <Badge variant="outline" className="bg-indigo-50 text-indigo-600 border-indigo-100 flex items-center gap-1">
-                      <GitBranch className="w-3 h-3" /> {ticket.branch}
-                    </Badge>
-                  </div>
-                  <h3 className="font-bold text-slate-900 mb-1">{ticket.title}</h3>
-                  <p className="text-sm text-slate-500 line-clamp-1">{ticket.description}</p>
-                  <div className="flex items-center gap-4 mt-4 text-[10px] text-slate-400 font-medium">
-                    <span className="flex items-center gap-1"><User className="w-3 h-3" /> {ticket.assignedTo}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatDistanceToNow(new Date(ticket.updatedAt), { addSuffix: true })}</span>
-                  </div>
-                </>
-              )}
+              renderCardContent={(ticket) => <TicketListCardContent ticket={ticket} />}
               renderRowActions={({ row }) => (
                 <div className="flex gap-1">
                   <Button variant="ghost" size="icon" onClick={() => onViewTicket(row.original.id, true)}><Edit2 className="w-4 h-4" /></Button>
@@ -279,6 +352,7 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
               )}
             />
           </Card>
+          </div>
         ) : (
           <Card className="overflow-hidden border-slate-200 shadow-sm rounded-xl">
             <MaterialReactTableWrapper<Ticket>
@@ -288,6 +362,7 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
               error={isError ? new Error('Failed to load tickets') : null}
               enableTopToolbar={false}
               enableRowActions
+              enableExpanding
               positionActionsColumn="last"
               maxHeight="calc(100vh - 280px)"
               pageSize={10}
@@ -297,6 +372,50 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
                   : 'No tickets match your filters. Try adjusting search or filters.'
               }
               errorMessage="Failed to load tickets. Check that the API is running and you are logged in."
+              renderDetailPanel={({ row }) => {
+                const t = row.original;
+                const slaPast = t.slaDueDate ? new Date(t.slaDueDate) < new Date() : false;
+                return (
+                  <div className="p-6 bg-slate-50/80 border-t border-slate-200">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-4 text-sm">
+                      <DetailItem label="ID" value={`#${t.id}`} mono />
+                      <DetailItem label="Title" value={t.title} />
+                      <DetailItem label="Description" value={t.description || '—'} className="sm:col-span-2 lg:col-span-3" />
+                      <DetailItem label="Status" value={(t.status as string).replace('-', ' ')} />
+                      <DetailItem label="Priority" value={t.priority} />
+                      <DetailItem label="Category" value={t.category ?? '—'} />
+                      <DetailItem label="Sub category" value={t.subCategory ?? '—'} />
+                      <DetailItem label="Zone" value={t.zone ?? '—'} />
+                      <DetailItem label="Branch" value={t.branch ?? '—'} />
+                      <DetailItem label="Location" value={t.location ?? '—'} />
+                      <DetailItem label="Assigned to" value={t.assignedTo ?? '—'} />
+                      <DetailItem label="Created by" value={t.createdBy ?? '—'} />
+                      <DetailItem label="Created" value={t.createdAt ? format(new Date(t.createdAt), 'dd/MM/yyyy HH:mm') : '—'} />
+                      <DetailItem label="Updated" value={t.updatedAt ? format(new Date(t.updatedAt), 'dd/MM/yyyy HH:mm') : '—'} />
+                      <DetailItem
+                        label="SLA due"
+                        value={t.slaDueDate ? format(new Date(t.slaDueDate), 'dd/MM/yyyy HH:mm') : '—'}
+                        valueClassName={slaPast ? 'text-rose-600 font-semibold' : undefined}
+                      />
+                      {t.escalationLevel != null && (
+                        <DetailItem label="Escalation level" value={String(t.escalationLevel)} />
+                      )}
+                      {t.escalatedTo && <DetailItem label="Escalated to" value={t.escalatedTo} />}
+                      {t.breachedSLA != null && (
+                        <DetailItem label="SLA breached" value={t.breachedSLA ? 'Yes' : 'No'} valueClassName={t.breachedSLA ? 'text-rose-600' : undefined} />
+                      )}
+                      {t.tags?.length ? (
+                        <div className="sm:col-span-2 lg:col-span-3 flex flex-wrap gap-1.5 items-center">
+                          <span className="text-slate-500 font-medium">Tags:</span>
+                          {t.tags.map((tag) => (
+                            <Badge key={tag} variant="outline" className="text-xs bg-slate-100 border-slate-200">{tag}</Badge>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              }}
               renderRowActions={({ row }: { row: MRT_Row<Ticket> }) => (
                 <div className="flex items-center justify-end gap-1">
                   <Button
