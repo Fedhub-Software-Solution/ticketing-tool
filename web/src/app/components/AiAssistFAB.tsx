@@ -117,6 +117,23 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
     const zoneId = zoneList.find((z) => z.name === zoneName)?.id;
     return (branches as { id: string; name: string; zoneId: string; code?: string }[]).filter((b) => b.zoneId === zoneId);
   }, [branches, zoneList, zoneName]);
+  /** Category and sub names for SLA filtering. */
+  const categoryNameForSla = useMemo(
+    () => parentCategories.find((c) => c.id === categoryId)?.name ?? '',
+    [parentCategories, categoryId]
+  );
+  const subCategoryNameForSla = useMemo(
+    () => (subCategory === 'none' ? '' : subCategory),
+    [subCategory]
+  );
+  /** Criticality options: SLAs filtered by selected category and sub-category. */
+  const criticalityOptions = useMemo(() => {
+    const all = slas as { id: string; name: string; priority: string; category?: string; subCategory?: string }[];
+    const cat = categoryNameForSla;
+    const sub = subCategoryNameForSla;
+    if (!cat && !sub) return all;
+    return all.filter((s) => (s.category ?? '') === cat && (s.subCategory ?? '') === sub);
+  }, [slas, categoryNameForSla, subCategoryNameForSla]);
   const selectedSla = useMemo(
     () => (slas as { id: string; name: string; priority: string }[]).find((s) => s.id === selectedSlaId),
     [slas, selectedSlaId]
@@ -132,6 +149,15 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  useEffect(() => {
+    if (criticalityOptions.length === 0) {
+      setSelectedSlaId('');
+      return;
+    }
+    const inList = criticalityOptions.some((s) => s.id === selectedSlaId);
+    if (!inList) setSelectedSlaId(criticalityOptions[0].id);
+  }, [criticalityOptions, selectedSlaId]);
 
   /** When transitioning from zone→branch or category→subCategory, pass overrides so options use the just-selected value (state may not have updated yet). */
   const getNextBotMessage = (
@@ -199,7 +225,7 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
         return {
           role: 'bot',
           content: 'Select criticality / priority.',
-          options: (slas as { id: string; name: string }[]).map((s) => ({ label: s.name, value: s.id })),
+          options: criticalityOptions.map((s) => ({ label: s.name, value: s.id })),
         };
       case 'zone':
         return {
@@ -308,9 +334,15 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
     setSubject(result.title || 'Support request');
     setDescription(result.description || '');
     const catMatch = parentCategories.find((c) => c.name.toLowerCase() === (result.category ?? '').toLowerCase());
-    setCategoryId(catMatch?.id ?? parentCategories[0]?.id ?? '');
-    const slaMatch = (slas as { id: string; priority: string }[]).find((s) => s.priority === (result.priority ?? 'medium'));
-    setSelectedSlaId(slaMatch?.id ?? (slas as { id: string }[])[0]?.id ?? '');
+    const newCategoryId = catMatch?.id ?? parentCategories[0]?.id ?? '';
+    setCategoryId(newCategoryId);
+    setSubCategory('none');
+    const catName = catMatch?.name ?? parentCategories[0]?.name ?? '';
+    const filtered = (slas as { id: string; priority: string; category?: string; subCategory?: string }[]).filter(
+      (s) => (s.category ?? '') === catName && (s.subCategory ?? '') === ''
+    );
+    const slaMatch = filtered.find((s) => s.priority === (result.priority ?? 'medium'));
+    setSelectedSlaId(slaMatch?.id ?? filtered[0]?.id ?? (slas as { id: string }[])[0]?.id ?? '');
   };
 
   const sendUserReply = (content: string) => {

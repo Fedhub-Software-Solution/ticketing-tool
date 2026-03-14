@@ -123,13 +123,32 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     () => categories.filter((c: { parentId?: string }) => c.parentId === selectedCategory),
     [categories, selectedCategory]
   );
-  /** Criticality dropdown: list of SLAs (show SLA name); selection sets ticket.priority + ticket.slaId */
+  /** Selected category/sub names for SLA filtering (from categories table). */
+  const selectedCategoryName = useMemo(
+    () => (categories as { id: string; name: string }[]).find((c) => c.id === selectedCategory)?.name ?? '',
+    [categories, selectedCategory]
+  );
+  const selectedSubCategoryName = useMemo(
+    () => (selectedSubCategory === 'none' ? '' : selectedSubCategory),
+    [selectedSubCategory]
+  );
+  /** Criticality dropdown: SLAs filtered by selected category and sub-category; selection sets ticket.priority + ticket.slaId */
   const criticalityOptions = useMemo(() => {
-    const list = (slas as SLA[]).slice();
-    const order: Array<'low' | 'medium' | 'high' | 'urgent'> = ['low', 'medium', 'high', 'urgent'];
-    list.sort((a, b) => order.indexOf(a.priority) - order.indexOf(b.priority));
+    const all = (slas as SLA[]).slice();
+    const categoryName = selectedCategoryName;
+    const subName = selectedSubCategoryName;
+    const list =
+      categoryName || subName
+        ? all.filter(
+            (s) =>
+              (s.category ?? '') === categoryName &&
+              (s.subCategory ?? '') === subName
+          )
+        : all;
+    const order: Array<'low' | 'medium' | 'high' | 'urgent' | 'critical'> = ['critical', 'urgent', 'high', 'medium', 'low'];
+    list.sort((a, b) => order.indexOf(a.priority as any) - order.indexOf(b.priority as any));
     return list;
-  }, [slas]);
+  }, [slas, selectedCategoryName, selectedSubCategoryName]);
   /** Status options from ticket_statuses table (for Current Status dropdown) */
   const statusOptions = useMemo(() => (ticketStatuses as TicketStatus[]).slice(), [ticketStatuses]);
   /** Only zones that have at least one branch (required for mandatory branch selection). */
@@ -182,9 +201,12 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     if (selectedBranch && !branchNames.includes(selectedBranch)) setSelectedBranch(branchNames[0] ?? '');
   }, [zoneValue, branchesForZone, selectedBranch]);
 
-  // When SLAs load: ensure a SLA is selected (first by priority order); keep priority in sync
+  // When category/sub or SLAs change: if current criticality is not in filtered list, select first available
   useEffect(() => {
-    if (!criticalityOptions.length) return;
+    if (!criticalityOptions.length) {
+      setSelectedSlaId('');
+      return;
+    }
     const first = criticalityOptions[0];
     const currentInList = criticalityOptions.some((s) => s.id === selectedSlaId);
     if (!currentInList) {
