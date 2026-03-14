@@ -29,6 +29,7 @@ export interface SLA {
   responseTime: number; // in minutes
   resolutionTime: number; // in minutes
   category?: string;
+  subCategory?: string;
 }
 
 export interface TicketStatus {
@@ -53,6 +54,7 @@ export interface EscalationRule {
 
 export interface Category {
   id: string;
+  categoryNumber?: string;
   name: string;
   description: string;
   icon: string;
@@ -89,4 +91,4 @@ export interface Ticket {
   childIds?: string[];
 }
 
-export type ViewType = 'dashboard' | 'tickets' | 'ticket-detail' | 'sla-config' | 'escalations' | 'categories' | 'enterprise' | 'escalated-tickets' | 'ticket-tracking' | 'reports' | 'my-open-tickets' | 'my-closed-tickets' | 'my-overdue-tickets' | 'board' | 'create-ticket' | 'users' | 'customer-portal' | 'profile';
+export type ViewType = 'dashboard' | 'tickets' | 'ticket-detail' | 'sla-config' | 'escalations' | 'categories' | 'enterprise' | 'escalated-tickets' | 'ticket-tracking' | 'reports' | 'my-open-tickets' | 'my-closed-tickets' | 'my-overdue-tickets' | 'board' | 'create-ticket' | 'users' | 'customer-portal' | 'profile' | 'notifications';

@@ -5,6 +5,7 @@ import { AuthRequest } from '../middleware';
 function toCategory(row: any) {
   return {
     id: row.id,
+    categoryNumber: row.category_number,
     name: row.name,
     description: row.description,
     icon: row.icon,

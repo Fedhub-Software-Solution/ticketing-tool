@@ -6,6 +6,8 @@ export interface TicketListParams {
   priority?: string;
   zone?: string;
   assignedTo?: string;
+  createdAfter?: string;
+  createdBefore?: string;
   limit?: number;
   offset?: number;
 }
@@ -129,6 +131,7 @@ export const ticketsApi = baseApi.injectEndpoints({
 
 export const {
   useGetTicketsQuery,
+  useLazyGetTicketsQuery,
   useGetTicketQuery,
   useCreateTicketMutation,
   useUpdateTicketMutation,

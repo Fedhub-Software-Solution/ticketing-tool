@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { pool } from '../db';
 import { AuthRequest } from '../middleware';
 import { UserResponse } from '../types';
-import { sendWelcomeEmail, sendProfileUpdatedEmail } from '../services/email';
+import { sendVerificationWithPasswordEmail, sendProfileUpdatedEmail } from '../services/email';
 import { config } from '../config';
 
 const ALPHANUM = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -152,17 +152,21 @@ export async function createUser(req: AuthRequest, res: Response): Promise<void>
   const roleVal = toEnumRole(role);
   const hash = await bcrypt.hash(plainPassword, 10);
   const emailNorm = email.trim().toLowerCase();
+  const verificationToken = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const baseUrl = (config as { frontendBaseUrl?: string }).frontendBaseUrl || 'http://localhost:5173';
+  const verificationLink = `${baseUrl.replace(/\/$/, '')}/verify-email?token=${encodeURIComponent(verificationToken)}`;
   try {
     const r = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, zone_id, branch_id, location, status, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO users (name, email, password_hash, role, zone_id, branch_id, location, status, created_by, email_verified, verification_token, verification_token_expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false, $10, $11)
        RETURNING id, name, email, role, avatar_url, zone_id, branch_id, location, status`,
-      [name.trim(), emailNorm, hash, roleVal, zone || null, branch || null, location || null, status, creatorId]
+      [name.trim(), emailNorm, hash, roleVal, zone || null, branch || null, location || null, status, creatorId, verificationToken, expiresAt]
     );
     const row = r.rows[0];
-    const emailResult = await sendWelcomeEmail(emailNorm, name.trim(), plainPassword);
+    const emailResult = await sendVerificationWithPasswordEmail(emailNorm, name.trim(), plainPassword, verificationLink);
     if (!emailResult.sent && config.nodeEnv === 'development') {
-      console.log('[dev] Welcome email not sent. Temporary password for', emailNorm, ':', plainPassword, '| Reason:', emailResult.reason);
+      console.log('[dev] Verification email not sent. Link for', emailNorm, ':', verificationLink, '| Password:', plainPassword, '| Reason:', emailResult.reason);
     }
     res.status(201).json({
       ...toUserResponse(row),

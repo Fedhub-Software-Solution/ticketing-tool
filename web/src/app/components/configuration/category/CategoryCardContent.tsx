@@ -5,10 +5,10 @@ import { getCategoryIcon } from './categoryIcons';
 type CategoryCardContentProps = {
   category: Category;
   parentName?: string;
-  slaName: string;
 };
 
-export function CategoryCardContent({ category, parentName, slaName }: CategoryCardContentProps) {
+export function CategoryCardContent({ category, parentName }: CategoryCardContentProps) {
+  const categoryType = parentName ? `Sub of ${parentName}` : 'Main Category';
   return (
     <>
       <div
@@ -20,31 +20,27 @@ export function CategoryCardContent({ category, parentName, slaName }: CategoryC
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 mb-0.5">
           <h3 className="font-bold text-slate-900 truncate">{category.name}</h3>
-          <Badge
-            variant="outline"
-            className="text-[10px] uppercase font-bold text-slate-400 border-slate-200 shrink-0"
-          >
-            {category.id}
-          </Badge>
+          {category.categoryNumber && (
+            <Badge
+              variant="outline"
+              className="text-[10px] font-medium text-slate-500 border-slate-200 shrink-0 rounded"
+            >
+              {category.categoryNumber}
+            </Badge>
+          )}
         </div>
-        <p className="text-sm text-slate-500 truncate pr-4">{category.description}</p>
-        <div className="flex flex-wrap items-center gap-4 mt-2 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-          <span>
-            Category Type:{' '}
-            <span className="text-slate-700 font-semibold normal-case">
-              {parentName ? `Sub of ${parentName}` : 'Main Category'}
-            </span>
-          </span>
-          <span>
-            SLA Policy:{' '}
-            <span className="text-slate-700 font-semibold normal-case">{slaName}</span>
-          </span>
-          <span className="flex items-center gap-1.5">
-            Status:{' '}
-            <span className="flex items-center gap-1 text-green-700 font-semibold normal-case">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-              Active
-            </span>
+        <p className="text-sm text-slate-500 truncate pr-4">{category.description || '—'}</p>
+      </div>
+      <div className="flex items-center gap-8 shrink-0 text-[10px] font-bold uppercase tracking-wider">
+        <div className="flex flex-col gap-0.5 text-left min-w-[100px]">
+          <span className="text-slate-400">Category Type</span>
+          <span className="font-semibold normal-case text-slate-700 text-left">{categoryType}</span>
+        </div>
+        <div className="flex flex-col gap-0.5 text-left min-w-[80px]">
+          <span className="text-slate-400">Status</span>
+          <span className="inline-flex items-center gap-1 text-green-700 font-semibold normal-case">
+            <span className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+            Active
           </span>
         </div>
       </div>

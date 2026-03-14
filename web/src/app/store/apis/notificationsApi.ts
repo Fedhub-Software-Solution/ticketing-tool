@@ -7,6 +7,7 @@ export interface Notification {
   title: string;
   description: string;
   ticketId?: string | null;
+  ticketNumber?: string | null;
   read: boolean;
   createdAt: string;
   time: string;

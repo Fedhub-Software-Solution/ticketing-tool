@@ -19,7 +19,80 @@ function getTransporter() {
 export type SendWelcomeEmailResult = { sent: true } | { sent: false; reason: string };
 
 /**
- * Send welcome email with temporary password.
+ * Send verification email with link. User must click to verify before they can log in.
+ */
+export async function sendVerificationEmail(to: string, name: string, verificationLink: string): Promise<SendWelcomeEmailResult> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    return { sent: false, reason: 'SMTP not configured (set SMTP_HOST, SMTP_USER, SMTP_PASS in .env)' };
+  }
+  const appName = 'Ticketing Tool Management';
+  try {
+    await transporter.sendMail({
+      from: config.smtp.from,
+      to,
+      subject: `Verify your email – ${appName}`,
+      text: `Hello ${name},\n\nPlease verify your email by clicking the link below:\n\n${verificationLink}\n\nThis link expires in 24 hours. After verification you can sign in with your email and password.\n\nBest regards,\n${appName}`,
+      html: `
+      <p>Hello ${name},</p>
+      <p>Please verify your email by clicking the link below:</p>
+      <p><a href="${verificationLink}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Verify my email</a></p>
+      <p>Or copy this link: ${verificationLink}</p>
+      <p>This link expires in 24 hours. After verification you can sign in with your email and password.</p>
+      <p>Best regards,<br/>${appName}</p>
+    `,
+    });
+    return { sent: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Verification email failed for', to, ':', message);
+    return { sent: false, reason: message };
+  }
+}
+
+/**
+ * Send verification email for admin-created user (includes temporary password). User must verify before log in.
+ */
+export async function sendVerificationWithPasswordEmail(
+  to: string,
+  name: string,
+  plainPassword: string,
+  verificationLink: string
+): Promise<SendWelcomeEmailResult> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    return { sent: false, reason: 'SMTP not configured (set SMTP_HOST, SMTP_USER, SMTP_PASS in .env)' };
+  }
+  const appName = 'Ticketing Tool Management';
+  try {
+    await transporter.sendMail({
+      from: config.smtp.from,
+      to,
+      subject: `Verify your email – ${appName}`,
+      text: `Hello ${name},\n\nYour account has been created. To sign in, you must first verify your email by clicking:\n\n${verificationLink}\n\nThis link expires in 24 hours. After verification you can sign in with:\n\nEmail: ${to}\nPassword: ${plainPassword}\n\nBest regards,\n${appName}`,
+      html: `
+      <p>Hello ${name},</p>
+      <p>Your account has been created. To sign in, you must first verify your email:</p>
+      <p><a href="${verificationLink}" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Verify my email</a></p>
+      <p>Or copy: ${verificationLink}</p>
+      <p>This link expires in 24 hours. After verification you can sign in with:</p>
+      <ul>
+        <li><strong>Email:</strong> ${to}</li>
+        <li><strong>Password:</strong> <code>${plainPassword}</code></li>
+      </ul>
+      <p>Best regards,<br/>${appName}</p>
+    `,
+    });
+    return { sent: true };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('[email] Verification (with password) email failed for', to, ':', message);
+    return { sent: false, reason: message };
+  }
+}
+
+/**
+ * Send welcome email with temporary password (for already-verified or legacy flow).
  * Returns { sent: false, reason } if SMTP is not configured or if sending fails.
  */
 export async function sendWelcomeEmail(to: string, name: string, plainPassword: string): Promise<SendWelcomeEmailResult> {

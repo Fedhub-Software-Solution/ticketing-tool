@@ -42,6 +42,8 @@ interface CreateTicketProps {
   onSuccess: () => void;
   ticketId?: string; // When provided, fetch ticket for editing mode
   ticket?: Ticket; // Optional pre-loaded ticket (legacy)
+  /** When set, prefill form from AI Assist (OpenAI-parsed suggestion) */
+  initialTicketData?: { title: string; description: string; priority?: 'low' | 'medium' | 'high' | 'urgent'; category?: string } | null;
 }
 
 interface Comment {
@@ -73,7 +75,7 @@ function formatCommentTime(iso: string): string {
   return d.toLocaleDateString();
 }
 
-export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket: ticketProp }: CreateTicketProps) {
+export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket: ticketProp, initialTicketData }: CreateTicketProps) {
   const { addTicket, updateTicket, refetch: refetchTickets } = useTickets();
   const [uploadAttachment] = useUploadAttachmentMutation();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -109,9 +111,9 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [statusValue, setStatusValue] = useState(ticket?.status || 'open');
-  const [titleValue, setTitleValue] = useState(ticket?.title || '');
-  const [descriptionValue, setDescriptionValue] = useState(ticket?.description || '');
-  const [priorityValue, setPriorityValue] = useState(ticket?.priority || 'medium');
+  const [titleValue, setTitleValue] = useState(ticket?.title || initialTicketData?.title || '');
+  const [descriptionValue, setDescriptionValue] = useState(ticket?.description || initialTicketData?.description || '');
+  const [priorityValue, setPriorityValue] = useState(ticket?.priority || initialTicketData?.priority || 'medium');
   const [selectedSlaId, setSelectedSlaId] = useState<string>(ticket?.slaId ?? '');
   const [assignedToValue, setAssignedToValue] = useState(ticket?.assignedTo || 'unassigned');
   const [zoneValue, setZoneValue] = useState(ticket?.zone || currentUser.zone || '');
@@ -130,6 +132,12 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
   }, [slas]);
   /** Status options from ticket_statuses table (for Current Status dropdown) */
   const statusOptions = useMemo(() => (ticketStatuses as TicketStatus[]).slice(), [ticketStatuses]);
+  /** Only zones that have at least one branch (required for mandatory branch selection). */
+  const zonesWithBranches = useMemo(() => {
+    const zList = zones as { id: string; name: string }[];
+    const bList = branches as { zoneId: string }[];
+    return zList.filter((z) => bList.some((b) => b.zoneId === z.id));
+  }, [zones, branches]);
   const selectedZoneId = useMemo(() => (zones as { id: string; name: string }[]).find((z) => z.name === zoneValue)?.id ?? null, [zones, zoneValue]);
   const branchesForZone = useMemo(
     () => (branches as { id: string; name: string; zoneId: string; code?: string }[]).filter((b) => b.zoneId === selectedZoneId),
@@ -156,8 +164,9 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
   }, [effectiveTicketId, apiComments, comments, currentUser.id]);
 
   useEffect(() => {
-    if (zones.length && !zoneValue) setZoneValue((zones as { name: string }[])[0]?.name ?? '');
-  }, [zones, zoneValue]);
+    if (zonesWithBranches.length && !zoneValue) setZoneValue(zonesWithBranches[0]?.name ?? '');
+    if (zoneValue && zonesWithBranches.length && !zonesWithBranches.some((z) => z.name === zoneValue)) setZoneValue(zonesWithBranches[0]?.name ?? '');
+  }, [zonesWithBranches, zoneValue]);
 
   useEffect(() => {
     if (parentCategories.length && !selectedCategory) setSelectedCategory(parentCategories[0]?.id ?? '');
@@ -209,6 +218,21 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     if (!codes.includes(statusValue)) setStatusValue(statusOptions[0].code);
   }, [statusOptions, statusValue]);
 
+  // When opening from AI Assist with a suggested category, sync selectedCategory once categories load
+  useEffect(() => {
+    if (!initialTicketData?.category || !parentCategories.length) return;
+    const parentList = parentCategories as { id: string; name: string }[];
+    const match = parentList.find((c) => c.name.toLowerCase() === initialTicketData!.category!.toLowerCase());
+    if (match) setSelectedCategory(match.id);
+  }, [initialTicketData?.category, parentCategories]);
+
+  // When opening from AI Assist with suggested priority, sync selectedSlaId to an SLA with that priority
+  useEffect(() => {
+    if (!initialTicketData?.priority || !criticalityOptions.length) return;
+    const match = criticalityOptions.find((s) => s.priority === initialTicketData!.priority);
+    if (match) setSelectedSlaId(match.id);
+  }, [initialTicketData?.priority, criticalityOptions]);
+
   useEffect(() => {
     syncedTicketIdRef.current = null;
   }, [ticketId]);
@@ -238,6 +262,17 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const missing: string[] = [];
+    if (!titleValue.trim()) missing.push('Title');
+    if (!descriptionValue.trim()) missing.push('Description');
+    if (!selectedCategory) missing.push('Category');
+    if (!zoneValue) missing.push('Zone');
+    if (!selectedBranch) missing.push('Branch');
+    if (!assignedToValue) missing.push('Assignee');
+    if (missing.length > 0) {
+      toast.error('Required fields missing', { description: `Please fill in: ${missing.join(', ')}` });
+      return;
+    }
     setIsSubmitting(true);
     
     try {
@@ -397,7 +432,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                     <div className="space-y-2.5">
                       <Label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                         <Info className="w-3.5 h-3.5 text-slate-400" />
-                        Ticket Subject
+                        Ticket Subject <span className="text-red-500">*</span>
                       </Label>
                       <Input 
                         value={titleValue} 
@@ -410,7 +445,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                     <div className="space-y-2.5">
                       <Label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                         <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
-                        Description
+                        Description <span className="text-red-500">*</span>
                       </Label>
                       <Textarea 
                         value={descriptionValue} 
@@ -424,7 +459,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                       <div className="space-y-2.5">
                         <Label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                           <Tag className="w-3.5 h-3.5 text-slate-400" />
-                          Service Category
+                          Service Category <span className="text-red-500">*</span>
                         </Label>
                         <Select value={selectedCategory} onValueChange={(v) => { setSelectedCategory(v); setSelectedSubCategory('none'); }}>
                           <SelectTrigger className="h-12 border-slate-200 bg-slate-50/30 focus:bg-white rounded-xl transition-all">
@@ -720,7 +755,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
 
                     <div className="space-y-2">
                       <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                        Assignment Zone
+                        <span className="inline-flex items-center gap-0.5">Assignment Zone <span className="text-red-500">*</span></span>
                         <Globe className="w-3 h-3" />
                       </Label>
                       <Select value={zoneValue} onValueChange={setZoneValue}>
@@ -728,7 +763,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
                           <SelectValue placeholder="Select zone" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl border-slate-200">
-                          {(zones as { id: string; name: string }[]).map((z) => (
+                          {zonesWithBranches.map((z) => (
                             <SelectItem key={z.id} value={z.name} className="font-medium focus:bg-slate-50">
                               {z.name}
                             </SelectItem>
@@ -739,7 +774,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
 
                     <div className="space-y-2">
                       <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                        Specific Branch
+                        <span className="inline-flex items-center gap-0.5">Specific Branch <span className="text-red-500">*</span></span>
                         <GitBranch className="w-3 h-3" />
                       </Label>
                       <Select value={selectedBranch} onValueChange={setSelectedBranch}>
@@ -756,7 +791,7 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
 
                     <div className="space-y-2">
                       <Label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                        Assigned Professional
+                        <span className="inline-flex items-center gap-0.5">Assigned Professional <span className="text-red-500">*</span></span>
                         <UserCircle className="w-3 h-3" />
                       </Label>
                       <Select value={assignedToValue} onValueChange={setAssignedToValue}>

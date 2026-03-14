@@ -30,9 +30,11 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
     name: '',
     email: '',
     password: '',
+    confirmPassword: '',
     company: '',
     phone: ''
   });
+  const [passwordError, setPasswordError] = useState('');
 
   const [showDemoInbox, setShowDemoInbox] = useState(false);
   const [lastEmailContent, setLastEmailContent] = useState<{to: string, code: string} | null>(null);
@@ -44,21 +46,30 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    setPasswordError('');
+    if (formData.password !== formData.confirmPassword) {
+      setPasswordError('Password and confirm password do not match.');
+      return;
+    }
+    if (formData.password.length < 6) {
+      setPasswordError('Password must be at least 6 characters.');
+      return;
+    }
     try {
-      const res = await registerUser({
+      await registerUser({
         name: formData.name.trim(),
-        email: formData.email.trim(),
+        email: formData.email.trim().toLowerCase(),
         password: formData.password,
+        confirmPassword: formData.confirmPassword,
         role: 'customer',
         companyName: formData.company.trim() || undefined,
         phoneNumber: formData.phone.trim() || undefined,
       }).unwrap();
-      toast.success('Account created successfully', {
-        description: 'You can now sign in with your email and password.',
+      toast.success('Check your email', {
+        description: 'Please verify your email using the link we sent. Then you can sign in.',
       });
       setMode('login');
-      setFormData((prev) => ({ ...prev, password: '' }));
-      onLogin(res.user);
+      setFormData((prev) => ({ ...prev, password: '', confirmPassword: '' }));
     } catch (err: unknown) {
       const e = err as { data?: { error?: string } };
       toast.error(e?.data?.error ?? 'Registration failed. Please try again.');
@@ -85,8 +96,9 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
       const res = await login({ email: formData.email, password: formData.password }).unwrap();
       onLogin(res.user);
       toast.success('Welcome back!');
-    } catch {
-      toast.error('Invalid credentials');
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string } };
+      toast.error(e?.data?.error ?? 'Invalid credentials');
     }
   };
 
@@ -362,10 +374,29 @@ export function CustomerPortal({ onBack, onLogin, autoShowQR = false }: Customer
                           className="pl-9" 
                           required 
                           value={formData.password}
-                          onChange={e => setFormData({...formData, password: e.target.value})}
+                          onChange={e => { setFormData({...formData, password: e.target.value}); setPasswordError(''); }}
                         />
                       </div>
                     </div>
+
+                    {mode === 'register' && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="confirmPassword">Confirm Password</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <Input 
+                            id="confirmPassword" 
+                            type="password" 
+                            placeholder="••••••••" 
+                            className="pl-9" 
+                            required 
+                            value={formData.confirmPassword}
+                            onChange={e => { setFormData({...formData, confirmPassword: e.target.value}); setPasswordError(''); }}
+                          />
+                        </div>
+                        {passwordError && <p className="text-sm text-red-600">{passwordError}</p>}
+                      </div>
+                    )}
 
                     <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 h-11" disabled={mode === 'register' && isRegistering}>
                       {mode === 'register' ? (isRegistering ? 'Creating…' : 'Create Account') : 'Sign In'}

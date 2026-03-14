@@ -18,8 +18,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/app/components/common/ui/dialog';
-import { SLA_PRIORITIES } from '@/app/components/common/constants';
-import type { SLAPriorityValue } from '@/app/components/common/constants';
+import { useGetPrioritiesQuery } from '@/app/store/apis/prioritiesApi';
+import { useGetCategoriesQuery } from '@/app/store/apis/categoriesApi';
 import type { SLA } from '@/app/types';
 import type { SLAFormData } from '@/app/components/common/constants';
 
@@ -42,6 +42,12 @@ export function SLAFormDialog({
   onUpdate: () => Promise<void>;
   onReset: () => void;
 }) {
+  const { data: priorities = [] } = useGetPrioritiesQuery();
+  const { data: categories = [] } = useGetCategoriesQuery();
+  const typedCategories = categories as { id: string; name: string; parentId?: string | null }[];
+  const parentCategories = typedCategories.filter((c) => !c.parentId);
+  const selectedParentId = parentCategories.find((c) => c.name === formData.category)?.id ?? null;
+  const subCategories = typedCategories.filter((c) => c.parentId === selectedParentId);
   const handleOpenChange = (next: boolean) => {
     onOpenChange(next);
     if (!next) onReset();
@@ -79,11 +85,60 @@ export function SLAFormDialog({
               className="bg-white"
             />
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="sla-category">Category</Label>
+              <Select
+                value={formData.category || 'none'}
+                onValueChange={(value) =>
+                  onFormDataChange({
+                    ...formData,
+                    category: value === 'none' ? '' : value,
+                    subCategory: '',
+                  })
+                }
+              >
+                <SelectTrigger id="sla-category" className="bg-white">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {parentCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sla-subcategory">Sub Category</Label>
+              <Select
+                value={formData.subCategory || 'none'}
+                onValueChange={(value) =>
+                  onFormDataChange({ ...formData, subCategory: value === 'none' ? '' : value })
+                }
+                disabled={!selectedParentId}
+              >
+                <SelectTrigger id="sla-subcategory" className="bg-white">
+                  <SelectValue placeholder="Select sub category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {subCategories.map((c) => (
+                    <SelectItem key={c.id} value={c.name}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="sla-priority">Target Priority</Label>
             <Select
               value={formData.priority}
-              onValueChange={(value: SLAPriorityValue) =>
+              onValueChange={(value) =>
                 onFormDataChange({ ...formData, priority: value })
               }
             >
@@ -91,9 +146,9 @@ export function SLAFormDialog({
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
               <SelectContent>
-                {SLA_PRIORITIES.map((p) => (
-                  <SelectItem key={p.value} value={p.value}>
-                    {p.label}
+                {priorities.map((p) => (
+                  <SelectItem key={p.id} value={p.code}>
+                    {p.name}
                   </SelectItem>
                 ))}
               </SelectContent>

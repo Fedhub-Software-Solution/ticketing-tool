@@ -12,11 +12,11 @@ export const slasApi = baseApi.injectEndpoints({
       query: (id) => `slas/${id}`,
       providesTags: (_result, _err, id) => [{ type: 'SLAs', id }],
     }),
-    createSLA: build.mutation<SLA, { name: string; priority: string; responseTime: number; resolutionTime: number; category?: string }>({
+    createSLA: build.mutation<SLA, { name: string; priority: string; responseTime: number; resolutionTime: number; category?: string; subCategory?: string }>({
       query: (body) => ({ url: 'slas', method: 'POST', body }),
       invalidatesTags: [{ type: 'SLAs', id: 'LIST' }],
     }),
-    updateSLA: build.mutation<SLA, { id: string; body: Partial<{ name: string; priority: string; responseTime: number; resolutionTime: number; category: string }> }>({
+    updateSLA: build.mutation<SLA, { id: string; body: Partial<{ name: string; priority: string; responseTime: number; resolutionTime: number; category: string; subCategory: string }> }>({
       query: ({ id, body }) => ({ url: `slas/${id}`, method: 'PATCH', body }),
       invalidatesTags: (_result, _err, { id }) => [{ type: 'SLAs', id }, { type: 'SLAs', id: 'LIST' }],
     }),

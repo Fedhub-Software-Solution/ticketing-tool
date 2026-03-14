@@ -1,25 +1,22 @@
 import { Card } from '../common/ui/card';
 import { Button } from '../common/ui/button';
-import { Badge } from '../common/ui/badge';
-import { 
-  AlertCircle, 
-  TrendingUp, 
-  Clock, 
+import {
+  AlertCircle,
+  TrendingUp,
+  TrendingDown,
+  Clock,
   CheckCircle2,
   ArrowUpRight,
-  ArrowDownRight,
   XCircle,
   Edit2,
 } from 'lucide-react';
 import { ViewType, User } from '@/app/types';
 import { motion } from 'motion/react';
-import { useTickets } from '@/app/hooks/useTickets';
-import { formatDistanceToNow } from 'date-fns';
+import { useGetTicketsQuery } from '@/app/store/apis/ticketsApi';
+import { useGetDashboardQuery } from '@/app/store/apis/reportsApi';
 import {
   LineChart,
   Line,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   PieChart,
@@ -39,92 +36,106 @@ interface DashboardProps {
   currentUser: User;
 }
 
+const PRIORITY_COLORS: Record<string, string> = {
+  Urgent: '#ef4444',
+  High: '#f59e0b',
+  Medium: '#eab308',
+  Low: '#3b82f6',
+};
+
 export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardProps) {
-  const { tickets } = useTickets();
-  
-  // Filter tickets based on role
-  const userTickets = currentUser.role === 'customer'
-    ? tickets.filter(t => t.createdBy === currentUser.name || (t as any).customerEmail === currentUser.email)
-    : tickets;
+  const dashboardParams =
+    currentUser.role === 'customer' ? { forUser: currentUser.id } : undefined;
+  const { data: dashboard, isLoading: dashboardLoading } = useGetDashboardQuery(dashboardParams);
+  const { data: tickets = [] } = useGetTicketsQuery({ limit: 10 });
 
-  // Calculate statistics using filtered tickets
-  const totalTickets = userTickets.length;
-  const openTickets = userTickets.filter(t => t.status === 'open').length;
-  const inProgressTickets = userTickets.filter(t => t.status === 'in-progress').length;
-  const resolvedTickets = userTickets.filter(t => t.status === 'resolved' || t.status === 'closed').length;
-  const urgentTickets = userTickets.filter(t => t.priority === 'urgent').length;
-  const breachedSLA = userTickets.filter(t => t.breachedSLA).length;
-  const escalatedTickets = userTickets.filter(t => t.escalationLevel && t.escalationLevel > 0).length;
+  const userTickets =
+    currentUser.role === 'customer'
+      ? (tickets as { createdBy?: string; id: string; title: string; updatedAt: string }[]).filter(
+          (t) => t.createdBy === currentUser.name
+        )
+      : (tickets as { id: string; title: string; updatedAt: string }[]);
+  const recentTickets = [...userTickets].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  ).slice(0, 5);
 
-  // Recent activity from filtered tickets
-  const recentTickets = [...userTickets]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 5);
-
-  // SLA compliance using filtered tickets
-  const slaCompliant = totalTickets - breachedSLA;
-  const slaComplianceRate = totalTickets > 0 ? Math.round((slaCompliant / totalTickets) * 100) : 100;
+  const summary = dashboard?.summary ?? {
+    total: 0,
+    open: 0,
+    inProgress: 0,
+    resolved: 0,
+    urgent: 0,
+    breachedSLA: 0,
+    slaComplianceRate: 100,
+  };
+  const change = dashboard?.change ?? { totalChangePct: 0, resolvedChangePct: 0 };
+  const trend = dashboard?.trend ?? [];
+  const priority = dashboard?.priority ?? { urgent: 0, high: 0, medium: 0, low: 0 };
+  const categoryFromApi = dashboard?.category ?? [];
 
   const stats = [
     {
       title: currentUser.role === 'customer' ? 'My Total Tickets' : 'Total Tickets',
-      value: totalTickets,
-      change: '+12%',
-      trend: 'up' as const,
+      value: summary.total,
+      change: change.totalChangePct !== 0 ? `${change.totalChangePct > 0 ? '+' : ''}${change.totalChangePct}%` : undefined,
+      trend: (change.totalChangePct >= 0 ? 'up' : 'down') as const,
       icon: ArrowUpRight,
-      color: 'blue',
+      color: 'blue' as const,
     },
     {
       title: 'SLA Compliance',
-      value: `${slaComplianceRate}%`,
-      subtitle: `${breachedSLA} breached`,
+      value: `${summary.slaComplianceRate}%`,
+      subtitle: `${summary.breachedSLA} breached`,
       icon: Clock,
-      color: slaComplianceRate > 80 ? 'green' : 'orange',
+      color: (summary.slaComplianceRate > 80 ? 'green' : 'orange') as const,
     },
     {
       title: 'Active / Open',
-      value: openTickets + inProgressTickets,
+      value: summary.open + summary.inProgress,
       subtitle: 'Currently processing',
       icon: TrendingUp,
-      color: 'purple',
+      color: 'purple' as const,
     },
     {
       title: 'Resolved',
-      value: resolvedTickets,
-      change: '+8%',
-      trend: 'up' as const,
+      value: summary.resolved,
+      change: change.resolvedChangePct !== 0 ? `${change.resolvedChangePct > 0 ? '+' : ''}${change.resolvedChangePct}%` : undefined,
+      trend: (change.resolvedChangePct >= 0 ? 'up' : 'down') as const,
       icon: CheckCircle2,
-      color: 'green',
+      color: 'green' as const,
     },
   ];
 
-  // Chart data - Ticket trends over last 7 days (using user specific tickets)
-  const trendData = [
-    { day: 'Mon', open: Math.floor(totalTickets * 0.1), resolved: Math.floor(resolvedTickets * 0.1), escalated: Math.floor(escalatedTickets * 0.1) },
-    { day: 'Tue', open: Math.floor(totalTickets * 0.2), resolved: Math.floor(resolvedTickets * 0.15), escalated: Math.floor(escalatedTickets * 0.2) },
-    { day: 'Wed', open: Math.floor(totalTickets * 0.15), resolved: Math.floor(resolvedTickets * 0.2), escalated: Math.floor(escalatedTickets * 0.1) },
-    { day: 'Thu', open: Math.floor(totalTickets * 0.25), resolved: Math.floor(resolvedTickets * 0.15), escalated: Math.floor(escalatedTickets * 0.3) },
-    { day: 'Fri', open: Math.floor(totalTickets * 0.2), resolved: Math.floor(resolvedTickets * 0.2), escalated: Math.floor(escalatedTickets * 0.2) },
-    { day: 'Sat', open: Math.floor(totalTickets * 0.05), resolved: Math.floor(resolvedTickets * 0.1), escalated: Math.floor(escalatedTickets * 0.05) },
-    { day: 'Sun', open: Math.floor(totalTickets * 0.05), resolved: Math.floor(resolvedTickets * 0.1), escalated: Math.floor(escalatedTickets * 0.05) },
-  ];
+  const dayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const trendData =
+    trend.length > 0
+      ? trend.map((d) => ({
+          day: d.day,
+          open: d.opened,
+          resolved: d.resolved,
+        }))
+      : Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setUTCDate(d.getUTCDate() - (6 - i));
+          return {
+            day: dayLabels[d.getUTCDay()],
+            open: 0,
+            resolved: 0,
+          };
+        });
 
-  // Category distribution
-  const categoryData = userTickets.map(ticket => ({
-    name: ticket.category,
-    value: userTickets.filter(t => t.category === ticket.category).length,
-    color: '#3b82f6', // Default color for categories
-  })).filter((cat, index, self) => 
-    cat.value > 0 && self.findIndex(c => c.name === cat.name) === index
-  );
+  const categoryData = categoryFromApi.map((c) => ({
+    name: c.name,
+    value: c.value,
+    color: '#3b82f6',
+  }));
 
-  // Priority distribution
   const priorityData = [
-    { name: 'Urgent', value: userTickets.filter(t => t.priority === 'urgent').length, color: '#ef4444' },
-    { name: 'High', value: userTickets.filter(t => t.priority === 'high').length, color: '#f59e0b' },
-    { name: 'Medium', value: userTickets.filter(t => t.priority === 'medium').length, color: '#eab308' },
-    { name: 'Low', value: userTickets.filter(t => t.priority === 'low').length, color: '#3b82f6' },
-  ];
+    { name: 'Urgent', value: priority.urgent, color: PRIORITY_COLORS.Urgent },
+    { name: 'High', value: priority.high, color: PRIORITY_COLORS.High },
+    { name: 'Medium', value: priority.medium, color: PRIORITY_COLORS.Medium },
+    { name: 'Low', value: priority.low, color: PRIORITY_COLORS.Low },
+  ].filter((p) => p.value > 0);
 
   const priorityColors = {
     urgent: 'bg-red-100 text-red-700',
@@ -139,6 +150,14 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
     resolved: 'bg-green-100 text-green-700',
     closed: 'bg-gray-100 text-gray-700',
   };
+
+  if (dashboardLoading) {
+    return (
+      <div className="h-full overflow-y-auto bg-transparent flex items-center justify-center p-8">
+        <p className="text-slate-500">Loading dashboard…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto bg-transparent">
@@ -176,10 +195,16 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
                       {stat.subtitle && (
                         <p className="text-xs text-slate-500">{stat.subtitle}</p>
                       )}
-                      {stat.change && (
+                      {stat.change != null && stat.change !== undefined && (
                         <div className="flex items-center gap-1 mt-2">
-                          <TrendingUp className="w-4 h-4 text-green-600" />
-                          <span className="text-sm font-medium text-green-600">{stat.change}</span>
+                          {stat.trend === 'up' ? (
+                            <TrendingUp className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-red-600" />
+                          )}
+                          <span className={`text-sm font-medium ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'}`}>
+                            {stat.change}
+                          </span>
                           <span className="text-xs text-slate-500">from last week</span>
                         </div>
                       )}
@@ -196,7 +221,7 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
 
         {/* Alerts */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-          {urgentTickets > 0 && (
+          {summary.urgent > 0 && (
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -209,7 +234,7 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
                   </div>
                   <div>
                     <p className="font-medium text-red-900">Urgent Attention Required</p>
-                    <p className="text-sm text-red-700">{urgentTickets} urgent tickets need immediate attention</p>
+                    <p className="text-sm text-red-700">{summary.urgent} urgent tickets need immediate attention</p>
                   </div>
                 </div>
                 <Button 
@@ -223,7 +248,7 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
               </div>
             </motion.div>
           )}
-          {breachedSLA > 0 && (
+          {summary.breachedSLA > 0 && (
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -236,7 +261,7 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
                   </div>
                   <div>
                     <p className="font-medium text-orange-900">SLA Breaches</p>
-                    <p className="text-sm text-orange-700">{breachedSLA} tickets have breached their SLA</p>
+                    <p className="text-sm text-orange-700">{summary.breachedSLA} tickets have breached their SLA</p>
                   </div>
                 </div>
                 <Button 
@@ -266,18 +291,21 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
                 <LineChart data={trendData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                   <XAxis dataKey="day" stroke="#64748b" />
-                  <YAxis stroke="#64748b" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'white', 
+                  <YAxis
+                    stroke="#64748b"
+                    allowDecimals={false}
+                    domain={[0, (max: number) => Math.max(1, max)]}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'white',
                       border: '1px solid #e2e8f0',
-                      borderRadius: '8px' 
-                    }} 
+                      borderRadius: '8px',
+                    }}
                   />
                   <Legend />
                   <Line type="monotone" dataKey="open" stroke="#3b82f6" strokeWidth={2} name="Opened" />
                   <Line type="monotone" dataKey="resolved" stroke="#10b981" strokeWidth={2} name="Resolved" />
-                  <Line type="monotone" dataKey="escalated" stroke="#f59e0b" strokeWidth={2} name="Escalated" />
                 </LineChart>
               </ResponsiveContainer>
             </Card>
@@ -292,23 +320,29 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
             <Card className="p-6 border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Priority Distribution</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={priorityData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {priorityData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
+                {priorityData.length > 0 ? (
+                  <PieChart>
+                    <Pie
+                      data={priorityData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {priorityData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value: number) => [value, 'Tickets']} />
+                  </PieChart>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-slate-500 text-sm">
+                    No priority data
+                  </div>
+                )}
               </ResponsiveContainer>
             </Card>
           </motion.div>
@@ -322,23 +356,25 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
             <Card className="p-6 border-slate-200">
               <h3 className="text-lg font-semibold text-slate-900 mb-4">Tickets by Category</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={categoryData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                  <XAxis dataKey="name" stroke="#64748b" angle={-45} textAnchor="end" height={80} />
-                  <YAxis stroke="#64748b" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'white', 
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px' 
-                    }} 
-                  />
-                  <Bar dataKey="value" name="Tickets">
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Bar>
-                </BarChart>
+                {categoryData.length > 0 ? (
+                  <BarChart data={categoryData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis dataKey="name" stroke="#64748b" angle={-45} textAnchor="end" height={80} />
+                    <YAxis stroke="#64748b" allowDecimals={false} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: 'white',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '8px',
+                      }}
+                    />
+                    <Bar dataKey="value" name="Tickets" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                ) : (
+                  <div className="h-[300px] flex items-center justify-center text-slate-500 text-sm">
+                    No category data
+                  </div>
+                )}
               </ResponsiveContainer>
             </Card>
           </motion.div>
@@ -354,17 +390,17 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
               <div className="h-[300px] flex flex-col justify-center">
                 <div className="text-center mb-6">
                   <div className="text-6xl font-bold text-slate-900 mb-2">
-                    {slaComplianceRate}%
+                    {summary.slaComplianceRate}%
                   </div>
                   <p className="text-slate-600">Overall SLA Compliance</p>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="text-center p-4 bg-green-50 rounded-lg">
-                    <p className="text-2xl font-bold text-green-600">{slaCompliant}</p>
+                    <p className="text-2xl font-bold text-green-600">{summary.total - summary.breachedSLA}</p>
                     <p className="text-sm text-slate-600">Compliant</p>
                   </div>
                   <div className="text-center p-4 bg-red-50 rounded-lg">
-                    <p className="text-2xl font-bold text-red-600">{breachedSLA}</p>
+                    <p className="text-2xl font-bold text-red-600">{summary.breachedSLA}</p>
                     <p className="text-sm text-slate-600">Breached</p>
                   </div>
                 </div>

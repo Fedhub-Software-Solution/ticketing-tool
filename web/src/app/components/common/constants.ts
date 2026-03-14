@@ -43,8 +43,9 @@ export const EMPTY_ENTERPRISE = {
   address: '',
 };
 
-/** Target priority values for SLA and escalation (source for dropdowns and validation). */
+/** Fallback priority labels for display when API not available (e.g. getPriorityLabel). */
 export const SLA_PRIORITIES = [
+  { value: 'critical', label: 'Critical' },
   { value: 'urgent', label: 'Urgent' },
   { value: 'high', label: 'High' },
   { value: 'medium', label: 'Medium' },
@@ -53,15 +54,16 @@ export const SLA_PRIORITIES = [
 
 export type SLAPriorityValue = (typeof SLA_PRIORITIES)[number]['value'];
 
-export const SLA_PRIORITY_COLORS: Record<SLAPriorityValue, string> = {
+export const SLA_PRIORITY_COLORS: Record<string, string> = {
+  critical: 'bg-red-100 text-red-700 border-red-200',
   urgent: 'bg-red-100 text-red-700 border-red-200',
   high: 'bg-orange-100 text-orange-700 border-orange-200',
   medium: 'bg-yellow-100 text-yellow-700 border-yellow-200',
   low: 'bg-blue-100 text-blue-700 border-blue-200',
 };
 
-/** Default SLA priority (medium). */
-export const SLA_DEFAULT_PRIORITY = SLA_PRIORITIES.find((p) => p.value === 'medium')!.value;
+/** Default SLA priority code when no selection (medium). */
+export const SLA_DEFAULT_PRIORITY = 'medium';
 
 /** Status (ticket_statuses.code) to dropdown item CSS. */
 export const STATUS_COLORS: Record<string, string> = {
@@ -75,14 +77,18 @@ export const STATUS_COLORS: Record<string, string> = {
 /** Initial form state for create/edit SLA. */
 export const SLA_INITIAL_FORM = {
   name: '',
-  priority: SLA_DEFAULT_PRIORITY as SLAPriorityValue,
+  priority: SLA_DEFAULT_PRIORITY,
+  category: '',
+  subCategory: '',
   responseTime: 60,
   resolutionTime: 480,
 } as const;
 
 export type SLAFormData = {
   name: string;
-  priority: SLAPriorityValue;
+  priority: string;
+  category: string;
+  subCategory: string;
   responseTime: number;
   resolutionTime: number;
 };

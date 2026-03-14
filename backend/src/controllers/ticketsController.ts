@@ -13,6 +13,12 @@ export async function resolveTicketId(id: string): Promise<string | null> {
   return id;
 }
 
+/** Breach = overdue: not closed/resolved, has SLA due date, past due. Same definition as Dashboard and Overdue Tickets. */
+function isBreachedSLA(row: any): boolean {
+  if (row.status === 'resolved' || row.status === 'closed' || row.sla_due_date == null) return false;
+  return new Date(row.sla_due_date) < new Date();
+}
+
 function toTicket(row: any) {
   return {
     id: row.ticket_number ?? row.id,
@@ -39,7 +45,7 @@ function toTicket(row: any) {
     slaDueDate: row.sla_due_date,
     escalationLevel: row.escalation_level ?? 0,
     escalatedTo: row.escalated_to,
-    breachedSLA: row.breached_sla ?? false,
+    breachedSLA: isBreachedSLA(row),
     parentId: row.parent_id,
     childIds: row.child_ids || [],
   };
@@ -70,6 +76,12 @@ async function resolveBranchId(branchNameOrCode: string | undefined, zoneId: str
     [branchNameOrCode.trim()]
   );
   return r.rows[0]?.id ?? null;
+}
+
+/** Treat "none" / "unassigned" / empty as null for UUID columns to avoid invalid input syntax. */
+function uuidOrNull(value: string | undefined | null): string | null {
+  if (value == null || value === '' || value === 'none' || value === 'unassigned') return null;
+  return value;
 }
 
 /** Get resolution time in minutes for SLA due calculation. Prefer slaId; fallback to first SLA for priority. */
@@ -110,7 +122,7 @@ async function ensureSlaDueDate(row: any, persist: boolean): Promise<void> {
 }
 
 export async function listTickets(req: AuthRequest, res: Response): Promise<void> {
-  const { status, priority, zone, assignedTo, limit = '50', offset = '0' } = req.query;
+  const { status, priority, zone, assignedTo, createdAfter, createdBefore, limit = '50', offset = '0' } = req.query;
   let sql = `
     SELECT t.*, c.name AS category_name,
            z.name AS zone_name, b.name AS branch_name,
@@ -143,6 +155,14 @@ export async function listTickets(req: AuthRequest, res: Response): Promise<void
   if (assignedTo) {
     sql += ` AND t.assigned_to_id = $${i++}`;
     params.push(assignedTo);
+  }
+  if (createdAfter) {
+    sql += ` AND t.created_at >= $${i++}`;
+    params.push(createdAfter);
+  }
+  if (createdBefore) {
+    sql += ` AND t.created_at <= $${i++}`;
+    params.push(createdBefore);
   }
   sql += ` ORDER BY t.updated_at DESC LIMIT $${i++} OFFSET $${i}`;
   params.push(parseInt(limit as string, 10) || 50, parseInt(offset as string, 10) || 0);
@@ -203,13 +223,37 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
     tags,
     parentId,
   } = req.body;
-  if (!title) {
+  if (!title || typeof title !== 'string' || !title.trim()) {
     res.status(400).json({ error: 'title required' });
+    return;
+  }
+  if (!description || typeof description !== 'string' || !description.trim()) {
+    res.status(400).json({ error: 'description required' });
+    return;
+  }
+  if (!categoryId) {
+    res.status(400).json({ error: 'categoryId required' });
+    return;
+  }
+  if (!zone) {
+    res.status(400).json({ error: 'zone required' });
+    return;
+  }
+  if (!branch) {
+    res.status(400).json({ error: 'branch required' });
     return;
   }
   const createdById = req.user!.userId;
   const zoneId = await resolveZoneId(zone);
   const branchId = await resolveBranchId(branch, zoneId);
+  if (!zoneId) {
+    res.status(400).json({ error: 'invalid zone' });
+    return;
+  }
+  if (!branchId) {
+    res.status(400).json({ error: 'invalid branch' });
+    return;
+  }
 
   const nextNum = await pool.query("SELECT nextval('ticket_number_seq') AS n");
   const n = nextNum.rows[0]?.n ?? 1;
@@ -224,23 +268,23 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
       description || null,
       status,
       priority,
-      categoryId || null,
-      subCategory || null,
+      uuidOrNull(categoryId),
+      subCategory === 'none' || subCategory === '' ? null : subCategory || null,
       zoneId,
       location || null,
       branchId,
       branchCode || null,
-      assignedToId || null,
+      uuidOrNull(assignedToId),
       createdById,
-      slaId || null,
+      uuidOrNull(slaId),
       slaDueDate || null,
       Array.isArray(tags) ? tags : [],
-      parentId || null,
+      uuidOrNull(parentId),
     ]
   );
   const row = r.rows[0];
   // Set SLA due date from SLA resolution time (slaId or priority)
-  const resolutionMins = await getSlaResolutionMinutes(slaId || null, priority || null);
+  const resolutionMins = await getSlaResolutionMinutes(uuidOrNull(slaId), priority || null);
   if (resolutionMins != null && resolutionMins >= 0) {
     const dueDate = addMinutes(row.created_at, resolutionMins);
     await pool.query('UPDATE tickets SET sla_due_date = $1 WHERE id = $2', [dueDate, row.id]);
@@ -376,27 +420,27 @@ export async function updateTicket(req: AuthRequest, res: Response): Promise<voi
     description,
     status,
     priority,
-    category_id: categoryId,
-    sub_category: subCategory,
+    category_id: categoryId !== undefined ? uuidOrNull(categoryId) : undefined,
+    sub_category: subCategory !== undefined ? (subCategory === 'none' || subCategory === '' ? null : subCategory) : undefined,
     zone_id: zoneId !== undefined ? zoneId : undefined,
     location,
     branch_id: branchId !== undefined ? branchId : undefined,
     branch_code: branchCode,
-    assigned_to_id: assignedToId,
-    sla_id: slaId,
+    assigned_to_id: assignedToId !== undefined ? uuidOrNull(assignedToId) : undefined,
+    sla_id: slaId !== undefined ? uuidOrNull(slaId) : undefined,
     sla_due_date: slaDueDate,
     escalation_level: escalationLevel,
     escalated_to: escalatedTo,
     breached_sla: breachedSLA,
     tags: tags != null ? (Array.isArray(tags) ? tags : [tags]) : undefined,
-    parent_id: parentId,
+    parent_id: parentId !== undefined ? uuidOrNull(parentId) : undefined,
   };
   // Recompute SLA due date when SLA or priority changes (from ticket created_at + SLA resolution time)
   if (slaId !== undefined || priority !== undefined) {
     const cur = await pool.query('SELECT created_at, sla_id, priority FROM tickets WHERE id = $1', [id]);
     const ticketRow = cur.rows[0];
     if (ticketRow) {
-      const effSlaId = slaId !== undefined ? slaId : ticketRow.sla_id;
+      const effSlaId = slaId !== undefined ? uuidOrNull(slaId) : ticketRow.sla_id;
       const effPriority = priority !== undefined ? priority : ticketRow.priority;
       const resolutionMins = await getSlaResolutionMinutes(effSlaId, effPriority);
       if (resolutionMins != null && resolutionMins >= 0) {

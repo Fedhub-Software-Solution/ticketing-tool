@@ -12,6 +12,7 @@ function toNotification(row: any) {
     title: row.title,
     description: row.description,
     ticketId: row.ticket_id,
+    ticketNumber: row.ticket_number ?? undefined,
     read: row.read,
     createdAt: row.created_at,
     time: row.created_at,
@@ -37,14 +38,19 @@ export async function listNotifications(req: AuthRequest, res: Response): Promis
   const limit = Math.min(parseInt(String(req.query.limit || 50), 10) || 50, 100);
 
   const r = await pool.query(
-    `SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`,
+    `SELECT n.*, t.ticket_number
+     FROM notifications n
+     LEFT JOIN tickets t ON n.ticket_id = t.id
+     WHERE n.user_id = $1
+     ORDER BY n.created_at DESC
+     LIMIT $2`,
     [userId, limit]
   );
   let list = r.rows.map(toNotification);
 
   // Append synthetic SLA breach warnings: tickets assigned to user, overdue, not closed/resolved
   const overdue = await pool.query(
-    `SELECT t.id, t.title, t.sla_due_date
+    `SELECT t.id, t.ticket_number, t.title, t.sla_due_date
      FROM tickets t
      WHERE t.assigned_to_id = $1 AND t.sla_due_date IS NOT NULL AND t.sla_due_date < now()
        AND t.status NOT IN ('closed', 'resolved')
@@ -55,13 +61,15 @@ export async function listNotifications(req: AuthRequest, res: Response): Promis
   const existingTicketIds = new Set(list.map((n: any) => n.ticketId).filter(Boolean));
   for (const row of overdue.rows) {
     if (existingTicketIds.has(row.id)) continue;
+    const displayName = row.title?.trim() || row.ticket_number || row.id;
     list.push({
       id: `sla-${row.id}`,
       userId,
       type: 'warning',
       title: 'SLA breach warning',
-      description: `${row.title || row.id} is past SLA deadline`,
+      description: `${displayName} is past SLA deadline`,
       ticketId: row.id,
+      ticketNumber: row.ticket_number ?? undefined,
       read: false,
       createdAt: row.sla_due_date,
       time: row.sla_due_date,

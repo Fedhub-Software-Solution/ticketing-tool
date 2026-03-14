@@ -10,6 +10,7 @@ function toSla(row: any) {
     responseTime: row.response_time_mins,
     resolutionTime: row.resolution_time_mins,
     category: row.category,
+    subCategory: row.sub_category,
   };
 }
 
@@ -30,27 +31,27 @@ export async function getSla(req: AuthRequest, res: Response): Promise<void> {
 }
 
 export async function createSla(req: AuthRequest, res: Response): Promise<void> {
-  const { name, priority, responseTime, resolutionTime, category } = req.body;
+  const { name, priority, responseTime, resolutionTime, category, subCategory } = req.body;
   if (!name || !priority || responseTime == null || resolutionTime == null) {
     res.status(400).json({ error: 'name, priority, responseTime, resolutionTime required' });
     return;
   }
   const r = await pool.query(
-    `INSERT INTO slas (name, priority, response_time_mins, resolution_time_mins, category)
-     VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-    [name, priority, responseTime, resolutionTime, category || null]
+    `INSERT INTO slas (name, priority, response_time_mins, resolution_time_mins, category, sub_category)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [name, priority, responseTime, resolutionTime, category || null, subCategory || null]
   );
   res.status(201).json(toSla(r.rows[0]));
 }
 
 export async function updateSla(req: AuthRequest, res: Response): Promise<void> {
   const { id } = req.params;
-  const { name, priority, responseTime, resolutionTime, category } = req.body;
+  const { name, priority, responseTime, resolutionTime, category, subCategory } = req.body;
   const r = await pool.query(
     `UPDATE slas SET name = COALESCE($1, name), priority = COALESCE($2, priority),
      response_time_mins = COALESCE($3, response_time_mins), resolution_time_mins = COALESCE($4, resolution_time_mins),
-     category = COALESCE($5, category) WHERE id = $6 RETURNING *`,
-    [name, priority, responseTime, resolutionTime, category, id]
+     category = COALESCE($5, category), sub_category = COALESCE($6, sub_category) WHERE id = $7 RETURNING *`,
+    [name, priority, responseTime, resolutionTime, category, subCategory, id]
   );
   const row = r.rows[0];
   if (!row) {

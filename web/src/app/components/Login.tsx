@@ -63,6 +63,7 @@ export function Login({ onLogin, onOpenCustomerPortal }: LoginProps) {
   const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [login, { isLoading: isLoginLoading }] = useLoginMutation();
   const [register, { isLoading: isRegisterLoading }] = useRegisterMutation();
@@ -75,31 +76,29 @@ export function Login({ onLogin, onOpenCustomerPortal }: LoginProps) {
       toast.success('Login successful!', {
         description: `Welcome back, ${res.user.name}!`,
       });
-    } catch {
-      toast.error('Invalid credentials', {
-        description: 'Please check your email and password.',
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string } };
+      toast.error(e?.data?.error ?? 'Invalid credentials', {
+        description: e?.data?.error ? undefined : 'Please check your email and password.',
       });
     }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      toast.error('Password and confirm password do not match.');
+      return;
+    }
     try {
-      const res = await register({ name, email, password, role: 'customer' }).unwrap();
-      onLogin(res.user);
-      toast.success('Registration successful!', {
-        description: 'Your account has been created.',
+      await register({ name, email, password, confirmPassword, role: 'customer' }).unwrap();
+      toast.success('Check your email', {
+        description: 'Please verify your email using the link we sent. Then you can sign in.',
       });
       setIsRegistering(false);
     } catch (err: any) {
       toast.error(err?.data?.error || 'Registration failed.');
     }
-  };
-
-  const handleDemoLogin = () => {
-    setEmail('admin@company.com');
-    setPassword('admin123');
-    toast.info('Fill credentials and click Sign in', { description: 'Or use admin@company.com / admin123' });
   };
 
   return (
@@ -302,6 +301,22 @@ export function Login({ onLogin, onOpenCustomerPortal }: LoginProps) {
                       </div>
                     </div>
 
+                    <div>
+                      <Label htmlFor="reg-confirm-password">Confirm Password</Label>
+                      <div className="relative mt-1.5">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                        <Input
+                          id="reg-confirm-password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Confirm your password"
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+
                     <Button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700">
                       Create Account
                       <ChevronRight className="w-4 h-4 ml-2" />
@@ -322,20 +337,6 @@ export function Login({ onLogin, onOpenCustomerPortal }: LoginProps) {
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {!isRegistering && (
-              <div className="mt-8 border-t border-slate-100 pt-8">
-                <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                  <p className="text-xs text-slate-600 font-medium mb-2">💡 Demo</p>
-                  <p className="text-xs text-slate-500 mb-3">
-                    Use admin@company.com / admin123 or customer@company.com / customer123 (after running backend seed).
-                  </p>
-                  <Button type="button" variant="outline" size="sm" onClick={handleDemoLogin} className="text-xs">
-                    Pre-fill admin credentials
-                  </Button>
-                </div>
-              </div>
-            )}
           </Card>
         </motion.div>
       </div>

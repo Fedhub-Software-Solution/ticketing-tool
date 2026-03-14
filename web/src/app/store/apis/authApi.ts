@@ -11,6 +11,7 @@ export interface RegisterRequest {
   name: string;
   email: string;
   password: string;
+  confirmPassword?: string;
   role?: string;
   companyName?: string;
   phoneNumber?: string;
@@ -19,6 +20,11 @@ export interface RegisterRequest {
 export interface AuthResponse {
   user: User;
   token: string;
+}
+
+export interface RegisterResponse {
+  message: string;
+  emailSent?: boolean;
 }
 
 export const authApi = baseApi.injectEndpoints({
@@ -34,16 +40,21 @@ export const authApi = baseApi.injectEndpoints({
         }
       },
     }),
-    register: build.mutation<AuthResponse, RegisterRequest>({
+    register: build.mutation<RegisterResponse, RegisterRequest>({
       query: (body) => ({ url: 'auth/register', method: 'POST', body }),
       async onQueryStarted(_, { dispatch, queryFulfilled }) {
         try {
           const { data } = await queryFulfilled;
-          dispatch(setCredentials({ user: data.user, token: data.token }));
+          if (data && 'token' in data && (data as AuthResponse).token) {
+            dispatch(setCredentials({ user: (data as AuthResponse).user, token: (data as AuthResponse).token }));
+          }
         } catch {
           // ignore
         }
       },
+    }),
+    verifyEmail: build.mutation<{ success: boolean; message: string }, { token: string }>({
+      query: ({ token }) => ({ url: `auth/verify-email?token=${encodeURIComponent(token)}`, method: 'GET' }),
     }),
     getMe: build.query<User, void>({
       query: () => 'auth/me',
@@ -63,4 +74,4 @@ export const authApi = baseApi.injectEndpoints({
   }),
 });
 
-export const { useLoginMutation, useRegisterMutation, useGetMeQuery, useLazyGetMeQuery, useChangePasswordMutation } = authApi;
+export const { useLoginMutation, useRegisterMutation, useVerifyEmailMutation, useGetMeQuery, useLazyGetMeQuery, useChangePasswordMutation } = authApi;

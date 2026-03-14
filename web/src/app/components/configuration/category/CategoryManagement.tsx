@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import type { MRT_Row } from 'material-react-table';
-import { FolderOpen, Plus, Search, Filter, List, Table, Layers, CheckCircle2, Shield } from 'lucide-react';
+import { FolderOpen, Plus, Search, Filter, List, Table, Layers, CheckCircle2 } from 'lucide-react';
 import { Card } from '../../common/ui/card';
 import { Button } from '../../common/ui/button';
 import { Input } from '../../common/ui/input';
@@ -40,7 +40,6 @@ import {
 import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
 import { MaterialReactTableCardListWrapper } from '@/app/components/common/mrt/MaterialReactTableCardListWrapper';
 import { useGetCategoriesQuery, useCreateCategoryMutation, useUpdateCategoryMutation, useDeleteCategoryMutation } from '@/app/store/apis/categoriesApi';
-import { useGetSLAsQuery } from '@/app/store/apis/slasApi';
 import { Category } from '@/app/types';
 import { toast } from 'sonner';
 import { iconOptions } from './categoryIcons';
@@ -62,7 +61,6 @@ const colorOptions = [
 
 export function CategoryManagement() {
   const { data: categories = [], isLoading: categoriesLoading } = useGetCategoriesQuery();
-  const { data: slas = [] } = useGetSLAsQuery();
   const [createCategory] = useCreateCategoryMutation();
   const [updateCategoryMutation] = useUpdateCategoryMutation();
   const [deleteCategoryMutation] = useDeleteCategoryMutation();
@@ -78,7 +76,6 @@ export function CategoryManagement() {
     description: '',
     icon: 'FolderOpen',
     color: '#3b82f6',
-    slaId: 'none',
     parentId: 'none',
   });
 
@@ -98,7 +95,6 @@ export function CategoryManagement() {
         description: formData.description,
         icon: formData.icon,
         color: formData.color,
-        slaId: formData.slaId === 'none' ? undefined : formData.slaId,
         parentId: formData.parentId === 'none' ? undefined : formData.parentId,
       }).unwrap();
       setIsDialogOpen(false);
@@ -119,7 +115,6 @@ export function CategoryManagement() {
           description: formData.description,
           icon: formData.icon,
           color: formData.color,
-          slaId: formData.slaId === 'none' ? undefined : formData.slaId,
           parentId: formData.parentId === 'none' ? undefined : formData.parentId,
         },
       }).unwrap();
@@ -150,7 +145,6 @@ export function CategoryManagement() {
       description: category.description,
       icon: category.icon,
       color: category.color,
-      slaId: category.slaId || 'none',
       parentId: category.parentId || 'none',
     });
     setIsDialogOpen(true);
@@ -162,7 +156,6 @@ export function CategoryManagement() {
       description: '',
       icon: 'FolderOpen',
       color: '#3b82f6',
-      slaId: 'none',
       parentId: 'none',
     });
     setEditingCategory(null);
@@ -172,14 +165,9 @@ export function CategoryManagement() {
     (id: string) => categories.find((c) => c.id === id)?.name,
     [categories]
   );
-  const getSlaName = useCallback(
-    (slaId: string | undefined) =>
-      slaId ? slas.find((s) => s.id === slaId)?.name ?? 'Default Policy' : 'Default Policy',
-    [slas]
-  );
   const categoryColumns = useMemo(
-    () => getCategoryTableColumns(getParentName, getSlaName),
-    [getParentName, getSlaName]
+    () => getCategoryTableColumns(getParentName),
+    [getParentName]
   );
 
   const EMPTY_MESSAGE =
@@ -199,15 +187,6 @@ export function CategoryManagement() {
               <div>
                 <p className="text-sm font-medium text-slate-500">Total Categories</p>
                 <p className="text-2xl font-bold text-slate-900">{categories.length}</p>
-              </div>
-            </Card>
-            <Card className="p-4 bg-white border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-indigo-50 flex items-center justify-center">
-                <Shield className="w-6 h-6 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-sm font-medium text-slate-500">With SLA Rules</p>
-                <p className="text-2xl font-bold text-slate-900">{categories.filter(c => c.slaId).length}</p>
               </div>
             </Card>
             <Card className="p-4 bg-white border-slate-200 shadow-sm flex items-center gap-4">
@@ -357,7 +336,8 @@ export function CategoryManagement() {
                           <SelectContent>
                             <SelectItem value="none">Set as Main Category</SelectItem>
                             {categories
-                              .filter(c => !editingCategory || c.id !== editingCategory.id)
+                              .filter((c) => !c.parentId)
+                              .filter((c) => !editingCategory || c.id !== editingCategory.id)
                               .map((cat) => (
                                 <SelectItem key={cat.id} value={cat.id}>
                                   Set as Sub-category of {cat.name}
@@ -366,25 +346,6 @@ export function CategoryManagement() {
                           </SelectContent>
                         </Select>
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="sla" className="text-slate-700 font-semibold">Associated SLA</Label>
-                      <Select
-                        value={formData.slaId}
-                        onValueChange={(value) => setFormData({ ...formData, slaId: value })}
-                      >
-                        <SelectTrigger className="h-11 bg-white border-slate-200">
-                          <SelectValue placeholder="Select SLA" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">Default Policy</SelectItem>
-                          {slas.map((sla) => (
-                            <SelectItem key={sla.id} value={sla.id}>
-                              {sla.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
                     </div>
                     <div className="space-y-3">
                       <Label className="text-slate-700 font-semibold">Theme Color</Label>
@@ -437,7 +398,6 @@ export function CategoryManagement() {
                 <CategoryCardContent
                   category={category}
                   parentName={category.parentId ? getParentName(category.parentId) : undefined}
-                  slaName={getSlaName(category.slaId)}
                 />
               )}
               renderRowActions={({ row }: { row: MRT_Row<Category> }) => (

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Bell, Settings, HelpCircle, LogOut, User as UserIcon, Ticket, Clock, ChevronDown } from 'lucide-react';
 import { Button } from './common/ui/button';
 import { Badge } from './common/ui/badge';
@@ -27,12 +28,18 @@ interface HeaderProps {
 }
 
 export function Header({ currentUser, onLogout, onNavigate, currentView }: HeaderProps) {
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const { data: notifications = [], isLoading: notificationsLoading } = useGetNotificationsQuery(undefined, {
     pollingInterval: 15000,
   });
   const [markRead] = useMarkNotificationReadMutation();
   const [markAllRead] = useMarkAllNotificationsReadMutation();
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const handleViewAllNotifications = () => {
+    setNotificationsOpen(false);
+    onNavigate('notifications');
+  };
 
   const getNotificationIcon = (type: string) => {
     const iconClass = "w-4 h-4";
@@ -127,7 +134,7 @@ export function Header({ currentUser, onLogout, onNavigate, currentView }: Heade
         </div>
 
         {/* Notifications */}
-        <Popover>
+        <Popover open={notificationsOpen} onOpenChange={setNotificationsOpen}>
           <PopoverTrigger asChild>
             <Button 
               variant="ghost" 
@@ -218,7 +225,11 @@ export function Header({ currentUser, onLogout, onNavigate, currentView }: Heade
                   Mark all read
                 </Button>
               )}
-              <Button variant="ghost" className="flex-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 rounded-lg uppercase tracking-wider">
+              <Button
+                variant="ghost"
+                className="flex-1 text-xs font-bold text-blue-600 hover:text-blue-700 hover:bg-blue-50/50 rounded-lg uppercase tracking-wider"
+                onClick={handleViewAllNotifications}
+              >
                 View All Notifications
               </Button>
             </div>

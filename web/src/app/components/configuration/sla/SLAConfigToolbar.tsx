@@ -14,7 +14,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/app/components/common/ui/tooltip';
-import { SLA_PRIORITIES } from '@/app/components/common/constants';
+import { useGetPrioritiesQuery } from '@/app/store/apis/prioritiesApi';
 import { SLAFormDialog } from './SLAFormDialog';
 import type { SLAFormData } from '@/app/components/common/constants';
 import type { SLA } from '@/app/types';
@@ -52,6 +52,7 @@ export function SLAConfigToolbar({
   onUpdate: () => Promise<void>;
   onResetForm: () => void;
 }) {
+  const { data: priorities = [] } = useGetPrioritiesQuery();
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
       <div className="flex flex-1 items-center gap-4">
@@ -72,9 +73,9 @@ export function SLAConfigToolbar({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Priorities</SelectItem>
-              {SLA_PRIORITIES.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
+              {priorities.map((p) => (
+                <SelectItem key={p.id} value={p.code}>
+                  {p.name}
                 </SelectItem>
               ))}
             </SelectContent>

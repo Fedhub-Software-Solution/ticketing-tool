@@ -61,6 +61,8 @@ export function SLAConfig() {
     setFormData({
       name: sla.name,
       priority: sla.priority,
+      category: sla.category ?? '',
+      subCategory: sla.subCategory ?? '',
       responseTime: sla.responseTime,
       resolutionTime: sla.resolutionTime,
     });
@@ -72,6 +74,8 @@ export function SLAConfig() {
       await createSLA({
         name: formData.name,
         priority: formData.priority,
+        category: formData.category || undefined,
+        subCategory: formData.subCategory || undefined,
         responseTime: formData.responseTime,
         resolutionTime: formData.resolutionTime,
       }).unwrap();

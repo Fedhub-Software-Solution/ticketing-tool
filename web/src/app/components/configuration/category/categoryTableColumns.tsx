@@ -4,8 +4,7 @@ import type { Category } from '@/app/types';
 import { getCategoryIcon } from './categoryIcons';
 
 export function getCategoryTableColumns(
-  parentName: (id: string) => string | undefined,
-  slaName: (id: string | undefined) => string
+  parentName: (id: string) => string | undefined
 ): MRT_ColumnDef<Category>[] {
   return [
     {
@@ -23,11 +22,24 @@ export function getCategoryTableColumns(
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-slate-900">{row.original.name}</span>
-            <span className="text-[10px] text-slate-400 font-mono truncate max-w-[180px]">
-              {row.original.id}
-            </span>
+            {row.original.categoryNumber && (
+              <span className="text-[10px] text-slate-400 font-mono">
+                {row.original.categoryNumber}
+              </span>
+            )}
           </div>
         </div>
+      ),
+    },
+    {
+      accessorKey: 'categoryNumber',
+      header: 'Category No.',
+      size: 100,
+      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+      Cell: ({ row }) => (
+        <span className="text-sm font-mono font-medium text-slate-700">
+          {row.original.categoryNumber ?? '—'}
+        </span>
       ),
     },
     {
@@ -52,17 +64,6 @@ export function getCategoryTableColumns(
             ? `Sub of ${parentName(row.original.parentId) ?? '—'}`
             : 'Main Category'}
         </span>
-      ),
-    },
-    {
-      accessorKey: 'slaId',
-      header: 'SLA Policy',
-      size: 140,
-      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
-      Cell: ({ row }) => (
-        <Badge variant="outline" className="bg-slate-50 text-slate-600 border-slate-200 font-medium">
-          {slaName(row.original.slaId)}
-        </Badge>
       ),
     },
     {

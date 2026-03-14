@@ -36,6 +36,28 @@ export function getSlaTableColumns(): MRT_ColumnDef<SLA>[] {
       ),
     },
     {
+      accessorKey: 'category',
+      header: 'Category',
+      size: 140,
+      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+      Cell: ({ row }) => (
+        <span className="text-slate-700">
+          {row.original.category ?? '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'subCategory',
+      header: 'Sub Category',
+      size: 130,
+      muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
+      Cell: ({ row }) => (
+        <span className="text-slate-700">
+          {row.original.subCategory ?? '—'}
+        </span>
+      ),
+    },
+    {
       id: 'goals',
       header: 'Goals',
       size: 180,

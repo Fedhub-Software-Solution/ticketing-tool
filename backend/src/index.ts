@@ -5,6 +5,7 @@ import { errorHandler } from './middleware';
 import authRoutes from './routes/auth';
 import usersRoutes from './routes/users';
 import slasRoutes from './routes/slas';
+import prioritiesRoutes from './routes/priorities';
 import escalationRulesRoutes from './routes/escalationRules';
 import categoriesRoutes from './routes/categories';
 import zonesRoutes from './routes/zones';
@@ -15,6 +16,7 @@ import ticketStatusesRoutes from './routes/ticketStatuses';
 import reportsRoutes from './routes/reports';
 import rolesRoutes from './routes/roles';
 import notificationsRoutes from './routes/notifications';
+import aiRoutes from './routes/ai';
 
 const app = express();
 app.use(cors());
@@ -27,6 +29,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/slas', slasRoutes);
+app.use('/api/priorities', prioritiesRoutes);
 app.use('/api/escalation-rules', escalationRulesRoutes);
 app.use('/api/categories', categoriesRoutes);
 app.use('/api/zones', zonesRoutes);
@@ -37,6 +40,7 @@ app.use('/api/ticket-statuses', ticketStatusesRoutes);
 app.use('/api/reports', reportsRoutes);
 app.use('/api/roles', rolesRoutes);
 app.use('/api/notifications', notificationsRoutes);
+app.use('/api/ai', aiRoutes);
 
 app.use(errorHandler);
 

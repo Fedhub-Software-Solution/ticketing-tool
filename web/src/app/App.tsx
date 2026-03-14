@@ -19,9 +19,12 @@ import { MyOverdueTickets } from './components/workplace/MyOverdueTickets';
 import { Board } from './components/menus/Board';
 import { CreateTicket } from './components/menus/CreateTicket';
 import { UserManagement } from './components/configuration/access-management/UserManagement';
+import { NotificationsPage } from './components/NotificationsPage';
 import { Login } from './components/Login';
 import { CustomerPortal } from './components/CustomerPortal';
+import { VerifyEmailPage } from './components/VerifyEmailPage';
 import { Profile } from './components/Profile';
+import { AiAssistFAB } from './components/AiAssistFAB';
 import { Toaster, toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSelector, useDispatch } from 'react-redux';
@@ -62,7 +65,7 @@ function AppContent() {
   const handleNavigate = (view: ViewType) => {
     if (view === 'create-ticket') {
       setPreviousView(currentView);
-      setSelectedTicketId(null); // Clear selected ticket when creating new
+      setSelectedTicketId(null);
     }
     setCurrentView(view);
   };
@@ -112,6 +115,7 @@ function AppContent() {
       'create-ticket': '',
       'users': 'Access Management',
       'profile': 'My Profile Settings',
+      'notifications': 'All Notifications',
     };
     return titles[view] || 'Service Desk';
   };
@@ -122,6 +126,17 @@ function AppContent() {
   };
 
   if (!currentUser) {
+    const isVerifyEmailRoute = typeof window !== 'undefined' && window.location.pathname === '/verify-email';
+    if (isVerifyEmailRoute) {
+      return (
+        <VerifyEmailPage
+          onGoToSignIn={() => {
+            window.history.replaceState({}, '', '/');
+            setIsCustomerPortal(true);
+          }}
+        />
+      );
+    }
     if (isCustomerPortal) {
       return (
         <CustomerPortal
@@ -177,6 +192,8 @@ function AppContent() {
                       ? 'History of tickets that have been completed and closed.'
                       : currentView === 'my-overdue-tickets'
                       ? 'Tickets that have exceeded their SLA deadline.'
+                      : currentView === 'notifications'
+                      ? 'View and manage all your notifications.'
                       : ''}
                   </motion.p>
                 </div>
@@ -248,6 +265,7 @@ function AppContent() {
                 {currentView === 'board' && <Board onViewTicket={handleViewTicket} onTrackTicket={handleTrackTicket} currentUser={currentUser} onNavigate={handleNavigate} />}
                 {currentView === 'users' && <UserManagement />}
                 {currentView === 'profile' && <Profile currentUser={currentUser} />}
+                {currentView === 'notifications' && <NotificationsPage />}
                 {currentView === 'create-ticket' && (
                   <CreateTicket
                     currentUser={currentUser}
@@ -261,6 +279,13 @@ function AppContent() {
           </div>
         </main>
       </div>
+      {token && currentUser && (
+        <AiAssistFAB
+          currentUser={currentUser}
+          onTicketCreated={() => {}}
+          hidden={currentView === 'create-ticket' || currentView === 'ticket-tracking'}
+        />
+      )}
     </div>
   );
 }
