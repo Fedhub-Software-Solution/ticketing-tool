@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search, Shield, Filter, Edit2, Trash2 } from 'lucide-react';
+import { Search, Shield, Filter, Edit2, Trash2, CheckCircle2, Clock, ChevronRight } from 'lucide-react';
 import { Button } from '../../common/ui/button';
 import { Input } from '../../common/ui/input';
 import {
@@ -140,54 +140,80 @@ export function AccessRolesTab({ isActive }: AccessRolesTabProps) {
 
   return (
     <>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 flex-1">
-          <div className="flex-1 max-w-md relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Search by role name, ID or description..."
-              value={roleSearchQuery}
-              onChange={(e) => setRoleSearchQuery(e.target.value)}
-              className="pl-10 bg-white border-slate-200 h-10 focus-visible:ring-indigo-500/20"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-[180px] bg-white border-slate-200 h-10">
-                <SelectValue placeholder="Filter by role" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All roles</SelectItem>
-                {rolesFromApi.map((role) => (
-                  <SelectItem key={role.id} value={role.id}>
-                    {role.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+      <div className="flex flex-col flex-1 min-h-0 gap-4">
+        {/* Role hierarchy map - workflow style */}
+        <div className="shrink-0">
+          <p className="text-sm font-bold text-slate-800 mb-3">Role Hierarchy:</p>
+          <div className="flex flex-wrap items-center gap-0">
+            <div className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-sm">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+              <span className="font-bold text-slate-900">Manager</span>
+            </div>
+            <ChevronRight className="w-6 h-6 text-slate-400 mx-1 shrink-0" aria-hidden />
+            <div className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 shadow-sm">
+              <Clock className="w-5 h-5 text-amber-500 shrink-0" />
+              <span className="font-bold text-slate-900">Team Lead</span>
+            </div>
+            <ChevronRight className="w-6 h-6 text-slate-400 mx-1 shrink-0" aria-hidden />
+            <div className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 shadow-sm">
+              <Clock className="w-5 h-5 text-amber-500 shrink-0" />
+              <span className="font-bold text-slate-900">Agent</span>
+            </div>
           </div>
         </div>
-        <Button
-          className="bg-indigo-600 hover:bg-indigo-700 shadow-md h-10 px-6 font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
-          onClick={() => {
-            setEditingRole(null);
-            setIsAddRoleOpen(true);
-          }}
-        >
-          <Shield className="w-4 h-4 mr-2" />
-          Add New Role
-        </Button>
-      </div>
 
-      <MaterialReactTableWrapper<Role>
-        columns={roleColumns}
-        data={filteredRoles}
-        isLoading={rolesLoading}
-        enableTopToolbar={false}
-        enableRowActions
-        positionActionsColumn="last"
-        renderRowActions={({ row }) => (
+        <div className="flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-4 flex-1">
+            <div className="flex-1 max-w-md relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Search by role name, ID or description..."
+                value={roleSearchQuery}
+                onChange={(e) => setRoleSearchQuery(e.target.value)}
+                className="pl-10 bg-white border-slate-200 h-10 focus-visible:ring-indigo-500/20"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-slate-400" />
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <SelectTrigger className="w-[180px] bg-white border-slate-200 h-10">
+                  <SelectValue placeholder="Filter by role" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All roles</SelectItem>
+                  {rolesFromApi.map((role) => (
+                    <SelectItem key={role.id} value={role.id}>
+                      {role.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <Button
+            className="bg-indigo-600 hover:bg-indigo-700 shadow-md h-10 px-6 font-semibold transition-all hover:scale-[1.02] active:scale-[0.98]"
+            onClick={() => {
+              setEditingRole(null);
+              setIsAddRoleOpen(true);
+            }}
+          >
+            <Shield className="w-4 h-4 mr-2" />
+            Add New Role
+          </Button>
+        </div>
+
+        <div className="flex-1 min-h-0 flex flex-col min-h-[260px] max-h-[calc(100vh-320px)] overflow-auto">
+          <MaterialReactTableWrapper<Role>
+            columns={roleColumns}
+            data={filteredRoles}
+            isLoading={rolesLoading}
+            enableTopToolbar={false}
+            enableBottomToolbar={true}
+            enableRowActions
+            positionActionsColumn="last"
+            pageSize={4}
+            maxHeight="460px"
+            renderRowActions={({ row }) => (
           <div className="flex items-center justify-end gap-1">
             <Button
               variant="ghost"
@@ -207,7 +233,9 @@ export function AccessRolesTab({ isActive }: AccessRolesTabProps) {
             </Button>
           </div>
         )}
-      />
+          />
+        </div>
+      </div>
 
       <RoleFormModal
         open={isAddRoleOpen}
