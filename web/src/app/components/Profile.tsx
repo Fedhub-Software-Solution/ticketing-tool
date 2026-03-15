@@ -88,7 +88,7 @@ export function Profile({ currentUser }: ProfileProps) {
 
   if (!user) {
     return (
-      <div className="p-8 max-w-5xl mx-auto flex items-center justify-center min-h-[40vh]">
+      <div className="p-8 w-full flex items-center justify-center min-h-[40vh]">
         {isLoading ? (
           <p className="text-slate-500">Loading profile…</p>
         ) : (
@@ -102,32 +102,32 @@ export function Profile({ currentUser }: ProfileProps) {
   const branchName = profile?.branchName ?? branches.find((b) => b.id === user.branch)?.name ?? user.branch ?? '—';
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-8 w-full space-y-8">
       <div className="flex items-end justify-between">
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4">
           <div className="relative group">
-            <div className="w-32 h-32 rounded-3xl bg-gradient-to-br from-blue-500 via-indigo-500 to-violet-600 flex items-center justify-center text-white text-4xl font-bold shadow-xl border-4 border-white overflow-hidden">
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 via-indigo-500 to-violet-600 flex items-center justify-center text-white text-lg font-bold shadow-md border-2 border-white overflow-hidden">
               {user.name.split(' ').map((n) => n[0]).join('')}
             </div>
-            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-green-500 rounded-xl border-4 border-white shadow-sm flex items-center justify-center">
-              <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+            <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-green-500 rounded-md border-2 border-white shadow-sm flex items-center justify-center">
+              <div className="w-1 h-1 bg-white rounded-full animate-pulse" />
             </div>
           </div>
-          <div className="space-y-1">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">{user.name}</h2>
+          <div className="space-y-0.5">
+            <h2 className="text-lg font-bold text-slate-900 tracking-tight">{user.name}</h2>
             <div className="flex items-center gap-2">
-              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-0 uppercase tracking-widest text-[10px] font-black px-2.5 py-1">
+              <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100 border-0 uppercase tracking-widest text-[10px] font-bold px-2 py-0.5">
                 {user.role}
               </Badge>
               <span className="text-slate-400">•</span>
-              <span className="text-sm font-medium text-slate-500">{zoneName} Operations</span>
+              <span className="text-xs font-medium text-slate-500">{zoneName} Operations</span>
             </div>
           </div>
         </div>
         <Button
           onClick={handleSaveProfile}
           disabled={isSaving}
-          className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-lg shadow-blue-200 gap-2 h-11 px-6 transition-all active:scale-95"
+          className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md gap-2 h-9 px-4 text-sm transition-all active:scale-95"
         >
           <Edit2 className="w-4 h-4" />
           <span className="font-bold">{isSaving ? 'Saving…' : 'Save Profile'}</span>

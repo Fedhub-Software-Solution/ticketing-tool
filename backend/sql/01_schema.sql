@@ -4,8 +4,7 @@
 -- Extensions (optional, for UUIDs)
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Enum types matching frontend
-CREATE TYPE user_role AS ENUM ('admin', 'manager', 'agent', 'customer');
+-- Enum types (user_role removed; users.role is VARCHAR from roles table)
 CREATE TYPE user_status AS ENUM ('active', 'inactive');
 CREATE TYPE ticket_status AS ENUM ('open', 'in-progress', 'resolved', 'closed');
 CREATE TYPE priority_level AS ENUM ('low', 'medium', 'high', 'urgent');
@@ -50,7 +49,7 @@ CREATE TABLE users (
   name          VARCHAR(255) NOT NULL,
   email         VARCHAR(255) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
-  role          user_role NOT NULL,
+  role          VARCHAR(50) NOT NULL,
   zone_id       UUID REFERENCES zones (id) ON DELETE SET NULL,
   branch_id     UUID REFERENCES branches (id) ON DELETE SET NULL,
   location      VARCHAR(255),

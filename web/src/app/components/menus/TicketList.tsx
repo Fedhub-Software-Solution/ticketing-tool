@@ -181,19 +181,8 @@ export function TicketList({ onViewTicket, onTrackTicket, onNavigate, currentUse
     if (onViewModeChange) onViewModeChange(mode);
   };
 
-  // Filter tickets based on user role and regional assignment
-  const getAccessibleTickets = () => {
-    if (currentUser.role === 'admin') return tickets;
-    if (currentUser.role === 'customer') return tickets.filter(ticket => ticket.createdBy === currentUser.name);
-    if (currentUser.zone) {
-      return tickets.filter(
-        ticket => ticket.zone === currentUser.zone || ticket.createdBy === currentUser.name
-      );
-    }
-    return tickets;
-  };
-
-  const accessibleTickets = getAccessibleTickets();
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const accessibleTickets = tickets;
   const assignedCount = accessibleTickets.filter(ticket => ticket.assignedTo === currentUser.name).length;
 
   const filteredTickets = useMemo(() => {

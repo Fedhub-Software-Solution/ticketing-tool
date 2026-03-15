@@ -74,12 +74,8 @@ export function MyClosedTickets({ onViewTicket, onTrackTicket, currentUser }: My
     return tickets.filter((t) => t.status === 'closed' || t.status === 'resolved');
   }, [tickets]);
 
-  const accessibleTickets = useMemo(() => {
-    if (currentUser.role === 'admin') return closedTickets;
-    if (currentUser.role === 'customer') return closedTickets.filter((t) => t.createdBy === currentUser.name);
-    if (userZoneName) return closedTickets.filter((t) => t.zone === userZoneName || t.assignedTo === currentUser.name);
-    return closedTickets.filter((t) => t.assignedTo === currentUser.name);
-  }, [closedTickets, currentUser, userZoneName]);
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const accessibleTickets = closedTickets;
 
   const filteredTickets = useMemo(() => {
     return accessibleTickets.filter((ticket) => {

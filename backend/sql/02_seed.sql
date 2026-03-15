@@ -30,7 +30,7 @@ SELECT
   'Admin User',
   'admin@company.com',
   '$2a$10$2YQNKj5fNVk8YGcbsxRjHO9CxX8Ce8IJchdCVAf9cUdszuaNYjtWC',
-  'admin'::user_role,
+  'admin',
   'active'::user_status
 WHERE NOT EXISTS (SELECT 1 FROM users WHERE email = 'admin@company.com');
 

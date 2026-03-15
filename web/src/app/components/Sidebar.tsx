@@ -24,32 +24,12 @@ export function Sidebar({ currentView, onNavigate, currentUser, onLogout }: Side
     [currentUser.zone, zoneList]
   );
 
-  // Accessible tickets (same logic as MyOpenTickets / MyClosedTickets / MyOverdueTickets)
-  const accessibleTickets = useMemo(() => {
-    if (currentUser.role === 'admin') return tickets;
-    if (currentUser.role === 'customer') return tickets.filter((t) => t.createdBy === currentUser.name);
-    if (userZoneName) return tickets.filter((t) => t.zone === userZoneName || t.assignedTo === currentUser.name);
-    return tickets.filter((t) => t.assignedTo === currentUser.name);
-  }, [tickets, currentUser, userZoneName]);
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const accessibleTickets = tickets;
 
-  // Calculate escalated tickets for current user based on region
+  // Escalated count: for non-admin, API already returns only assigned tickets
   const getEscalatedTicketsCount = () => {
-    if (currentUser.role === 'admin') {
-      return tickets.filter(ticket => ticket.escalationLevel && ticket.escalationLevel > 0).length;
-    } else if (currentUser.role === 'manager') {
-      return tickets.filter(ticket => 
-        ticket.escalationLevel && 
-        ticket.escalationLevel > 0 && 
-        ticket.zone === userZoneName
-      ).length;
-    } else if (currentUser.role === 'agent') {
-      return tickets.filter(ticket => 
-        ticket.escalationLevel && 
-        ticket.escalationLevel > 0 && 
-        ticket.assignedTo === currentUser.name
-      ).length;
-    }
-    return 0;
+    return tickets.filter(ticket => ticket.escalationLevel && ticket.escalationLevel > 0).length;
   };
 
   const escalatedCount = getEscalatedTicketsCount();
@@ -73,35 +53,46 @@ export function Sidebar({ currentView, onNavigate, currentUser, onLogout }: Side
     }).length;
   }, [accessibleTickets]);
 
-  // Role-based menu items
+  // Menu visibility: admin always sees everything; others use permissions when available, else role list
+  const hasPermission = (permission: string) => currentUser.permissions?.includes(permission);
+  const canSee = (item: { requiredPermission?: string; roles: string[] }) => {
+    if (currentUser.role === 'admin') return true;
+    if (item.requiredPermission && currentUser.permissions) return hasPermission(item.requiredPermission);
+    return item.roles.includes(currentUser.role);
+  };
+
   const getMenuItems = () => {
     const baseItems = [
-      { id: 'dashboard' as ViewType, icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'agent', 'customer'] },
-      { id: 'tickets' as ViewType, icon: Ticket, label: 'Tickets', roles: ['admin', 'manager', 'agent', 'customer'] },
-      { id: 'board' as ViewType, icon: Columns3, label: 'Board', roles: ['admin', 'manager', 'agent', 'customer'] },
-      { id: 'reports' as ViewType, icon: FileText, label: 'Reports', roles: ['admin', 'manager', 'agent'] },
+      { id: 'dashboard' as ViewType, icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'manager', 'agent', 'customer'], requiredPermission: 'Dashboard' },
+      { id: 'tickets' as ViewType, icon: Ticket, label: 'Tickets', roles: ['admin', 'manager', 'agent', 'customer'], requiredPermission: 'Tickets' },
+      { id: 'board' as ViewType, icon: Columns3, label: 'Board', roles: ['admin', 'manager', 'agent', 'customer'], requiredPermission: 'Board' },
+      { id: 'reports' as ViewType, icon: FileText, label: 'Reports', roles: ['admin', 'manager', 'agent'], requiredPermission: 'Reports' },
     ];
+    return baseItems.filter(canSee);
+  };
 
-    return baseItems.filter(item => 
-      item.roles.includes(currentUser.role)
-    );
+  const getWorkplaceItems = () => {
+    const items = [
+      { id: 'my-open-tickets' as ViewType, icon: CheckCircle2, label: 'Open Tickets', roles: ['admin', 'manager', 'agent', 'customer'], requiredPermission: 'Open Tickets' },
+      { id: 'my-closed-tickets' as ViewType, icon: XCircle, label: 'Closed Tickets', roles: ['admin', 'manager', 'agent', 'customer'], requiredPermission: 'Closed Tickets' },
+      { id: 'my-overdue-tickets' as ViewType, icon: Clock, label: 'Overdue Tickets', roles: ['admin', 'manager', 'agent', 'customer'], requiredPermission: 'Overdue Tickets' },
+    ];
+    return items.filter(canSee);
   };
 
   const getSettingsItems = () => {
     const settingsItems = [
-      { id: 'users' as ViewType, icon: UserCog, label: 'Access Management', roles: ['admin'] },
-      { id: 'sla-config' as ViewType, icon: Settings, label: 'SLA Config', roles: ['admin', 'manager'] },
-      { id: 'escalations' as ViewType, icon: BarChart3, label: 'Escalations', roles: ['admin', 'manager'] },
-      { id: 'categories' as ViewType, icon: Tag, label: 'Categories', roles: ['admin', 'manager'] },
-      { id: 'enterprise' as ViewType, icon: Globe, label: 'Enterprise Setup', roles: ['admin', 'manager'] },
+      { id: 'users' as ViewType, icon: UserCog, label: 'Access Management', roles: ['admin'], requiredPermission: 'Access Management' },
+      { id: 'sla-config' as ViewType, icon: Settings, label: 'SLA Config', roles: ['admin', 'manager'], requiredPermission: 'SLA Config' },
+      { id: 'escalations' as ViewType, icon: BarChart3, label: 'Escalations', roles: ['admin', 'manager'], requiredPermission: 'Escalations' },
+      { id: 'categories' as ViewType, icon: Tag, label: 'Categories', roles: ['admin', 'manager'], requiredPermission: 'Categories' },
+      { id: 'enterprise' as ViewType, icon: Globe, label: 'Enterprise Setup', roles: ['admin', 'manager'], requiredPermission: 'Enterprise Setup' },
     ];
-
-    return settingsItems.filter(item => 
-      item.roles.includes(currentUser.role)
-    );
+    return settingsItems.filter(canSee);
   };
 
   const menuItems = getMenuItems();
+  const workplaceItems = getWorkplaceItems();
   const settingsItems = getSettingsItems();
 
   return (
@@ -173,9 +164,14 @@ export function Sidebar({ currentView, onNavigate, currentUser, onLogout }: Side
             </p>
           )}
           <div className="space-y-1.5">
-            <SidebarItem icon={CheckCircle2} label="Open Tickets" count={myOpenCount} isActive={currentView === 'my-open-tickets'} onClick={() => onNavigate('my-open-tickets' as ViewType)} isCollapsed={isCollapsed} activeColor="text-emerald-600" activeBg="bg-emerald-50" />
-            <SidebarItem icon={XCircle} label="Closed Tickets" count={myClosedCount} isActive={currentView === 'my-closed-tickets'} onClick={() => onNavigate('my-closed-tickets' as ViewType)} isCollapsed={isCollapsed} activeColor="text-slate-600" activeBg="bg-slate-100" />
-            <SidebarItem icon={Clock} label="Overdue Tickets" count={myOverdueCount} isActive={currentView === 'my-overdue-tickets'} onClick={() => onNavigate('my-overdue-tickets' as ViewType)} isCollapsed={isCollapsed} activeColor="text-rose-600" activeBg="bg-rose-50" />
+            {workplaceItems.map((item) => {
+              const count = item.id === 'my-open-tickets' ? myOpenCount : item.id === 'my-closed-tickets' ? myClosedCount : myOverdueCount;
+              const activeColor = item.id === 'my-open-tickets' ? 'text-emerald-600' : item.id === 'my-closed-tickets' ? 'text-slate-600' : 'text-rose-600';
+              const activeBg = item.id === 'my-open-tickets' ? 'bg-emerald-50' : item.id === 'my-closed-tickets' ? 'bg-slate-100' : 'bg-rose-50';
+              return (
+                <SidebarItem key={item.id} icon={item.icon} label={item.label} count={count} isActive={currentView === item.id} onClick={() => onNavigate(item.id)} isCollapsed={isCollapsed} activeColor={activeColor} activeBg={activeBg} />
+              );
+            })}
           </div>
         </div>
 

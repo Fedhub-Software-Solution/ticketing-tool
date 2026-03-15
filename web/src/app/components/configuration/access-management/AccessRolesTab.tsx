@@ -22,7 +22,6 @@ import { useGetRolesQuery, useCreateRoleMutation, useUpdateRoleMutation, useDele
 import type { Role } from '@/app/store/apis/rolesApi';
 import { MaterialReactTableWrapper } from '../../common/mrt/MaterialReactTableWrapper';
 import { toast } from 'sonner';
-import { RESERVED_ROLE_CODES } from '../../common/constants';
 import { slugFromName } from '../../common/utils';
 import { getRoleColumns } from './columns/roleColumns';
 import { RoleFormModal, type RoleFormData } from './RoleFormModal';
@@ -71,8 +70,7 @@ export function AccessRolesTab({ isActive }: AccessRolesTabProps) {
   }, [editingRole, isAddRoleOpen]);
 
   const roleEffectiveCode = roleFormData.code.trim() || slugFromName(roleFormData.name);
-  const isReservedCode = roleEffectiveCode && RESERVED_ROLE_CODES.includes(roleEffectiveCode);
-  const roleCodeConflict = !editingRole && isReservedCode;
+  const roleCodeConflict = !editingRole && !!roleEffectiveCode && rolesFromApi.some((r) => r.code === roleEffectiveCode);
 
   const filteredRoles = useMemo(() => {
     return rolesFromApi.filter((role) => {
@@ -97,7 +95,7 @@ export function AccessRolesTab({ isActive }: AccessRolesTabProps) {
   const handleAddRole = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!editingRole && roleCodeConflict) {
-      toast.error('Choose a different role name or enter a custom role code (e.g. branch-manager).');
+      toast.error('A role with this code already exists. Use a different name or code.');
       return;
     }
     try {
@@ -199,16 +197,14 @@ export function AccessRolesTab({ isActive }: AccessRolesTabProps) {
             >
               <Edit2 className="w-4 h-4" />
             </Button>
-            {!row.original.isSystem && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
-                onClick={() => setRoleToDelete(row.original)}
-              >
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 text-slate-400 hover:text-red-600 hover:bg-red-50"
+              onClick={() => setRoleToDelete(row.original)}
+            >
+              <Trash2 className="w-4 h-4" />
+            </Button>
           </div>
         )}
       />

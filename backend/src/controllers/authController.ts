@@ -7,11 +7,12 @@ import { config } from '../config';
 import { AuthRequest } from '../middleware';
 import { UserResponse } from '../types';
 import { sendVerificationEmail } from '../services/email';
+import { getPermissionsForRole } from '../lib/roleEnums';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function toUserResponse(row: any): UserResponse {
-  return {
+function toUserResponse(row: any, permissions?: string[]): UserResponse {
+  const out: UserResponse = {
     id: row.id,
     name: row.name,
     email: row.email,
@@ -22,6 +23,8 @@ function toUserResponse(row: any): UserResponse {
     location: row.location,
     status: row.status,
   };
+  if (permissions) out.permissions = permissions;
+  return out;
 }
 
 export async function login(req: AuthRequest, res: Response): Promise<void> {
@@ -51,12 +54,13 @@ export async function login(req: AuthRequest, res: Response): Promise<void> {
     res.status(401).json({ error: 'Invalid email or password' });
     return;
   }
+  const permissions = await getPermissionsForRole(row.role);
   const token = jwt.sign(
     { userId: row.id, email: row.email, role: row.role },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn } as SignOptions
   );
-  res.json({ user: toUserResponse(row), token });
+  res.json({ user: toUserResponse(row, permissions), token });
 }
 
 export async function register(req: AuthRequest, res: Response): Promise<void> {
@@ -170,7 +174,8 @@ export async function me(req: AuthRequest, res: Response): Promise<void> {
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  const user = toUserResponse(row);
+  const permissions = await getPermissionsForRole(row.role);
+  const user = toUserResponse(row, permissions);
   const profile = {
     ...user,
     zoneName: row.zone_name ?? undefined,

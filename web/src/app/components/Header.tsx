@@ -16,6 +16,7 @@ import {
   PopoverTrigger,
 } from './common/ui/popover';
 import { User } from '@/app/types';
+import { ROLE_COLORS, DEFAULT_ROLE_BADGE } from './common/constants';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDistanceToNow } from 'date-fns';
 import { useGetNotificationsQuery, useMarkNotificationReadMutation, useMarkAllNotificationsReadMutation } from '@/app/store/apis/notificationsApi';
@@ -63,18 +64,7 @@ export function Header({ currentUser, onLogout, onNavigate, currentView }: Heade
     }
   };
 
-  const getRoleBadgeColor = (role: string) => {
-    switch (role) {
-      case 'admin':
-        return 'bg-red-100 text-red-700 border-red-200';
-      case 'manager':
-        return 'bg-purple-100 text-purple-700 border-purple-200';
-      case 'agent':
-        return 'bg-blue-100 text-blue-700 border-blue-200';
-      default:
-        return 'bg-slate-100 text-slate-700 border-slate-200';
-    }
-  };
+  const getRoleBadgeColor = (role: string) => ROLE_COLORS[role] ?? DEFAULT_ROLE_BADGE;
 
   return (
     <header className="bg-slate-50/80 backdrop-blur-xl border-b border-slate-200/60 px-6 py-2.5 flex items-center justify-between sticky top-0 z-40 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">

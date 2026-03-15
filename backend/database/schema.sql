@@ -11,7 +11,6 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- ENUMS (optional; can use CHECK constraints instead for flexibility)
 -- =============================================================================
 
-CREATE TYPE user_role AS ENUM ('admin', 'manager', 'agent', 'customer');
 CREATE TYPE user_status_type AS ENUM ('active', 'inactive');
 CREATE TYPE ticket_priority AS ENUM ('low', 'medium', 'high', 'urgent');
 CREATE TYPE ticket_status_type AS ENUM ('open', 'in-progress', 'resolved', 'closed');
@@ -25,7 +24,7 @@ CREATE TABLE users (
   name              VARCHAR(255) NOT NULL,
   email             VARCHAR(255) NOT NULL UNIQUE,
   password_hash     VARCHAR(255) NOT NULL,
-  role              user_role NOT NULL DEFAULT 'customer',
+  role              VARCHAR(50) NOT NULL DEFAULT 'customer',
   avatar            VARCHAR(512),
   zone              VARCHAR(100),
   branch            VARCHAR(255),

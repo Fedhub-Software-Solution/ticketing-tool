@@ -63,9 +63,8 @@ export function RoleFormModal({
               <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 <span className="shrink-0">⚠</span>
                 <span>
-                  Role name &quot;{roleFormData.name}&quot; produces a reserved code (
-                  <code className="font-mono text-amber-700">{roleEffectiveCode}</code>). Enter a custom code below
-                  (e.g. branch-manager) to create this role.
+                  A role with code <code className="font-mono text-amber-700">{roleEffectiveCode}</code> already exists.
+                  Use a different role name or enter a custom code below.
                 </span>
               </div>
             )}

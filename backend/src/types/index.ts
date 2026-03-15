@@ -27,6 +27,7 @@ export interface UserResponse {
   branch?: string;
   location?: string;
   status: UserStatus;
+  permissions?: string[];
 }
 
 export interface SLARow {

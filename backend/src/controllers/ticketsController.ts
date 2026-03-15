@@ -137,6 +137,11 @@ export async function listTickets(req: AuthRequest, res: Response): Promise<void
     WHERE 1=1`;
   const params: any[] = [];
   let i = 1;
+  // Non-admin users see only tickets assigned to them
+  if (req.user && req.user.role !== 'admin') {
+    sql += ` AND t.assigned_to_id = $${i++}`;
+    params.push(req.user.userId);
+  }
   if (status) {
     sql += ` AND t.status = $${i++}`;
     params.push(status);
@@ -152,7 +157,7 @@ export async function listTickets(req: AuthRequest, res: Response): Promise<void
       params.push(zoneId);
     }
   }
-  if (assignedTo) {
+  if (assignedTo && req.user?.role === 'admin') {
     sql += ` AND t.assigned_to_id = $${i++}`;
     params.push(assignedTo);
   }
@@ -197,6 +202,11 @@ export async function getTicket(req: AuthRequest, res: Response): Promise<void> 
   );
   const row = r.rows[0];
   if (!row) {
+    res.status(404).json({ error: 'Ticket not found' });
+    return;
+  }
+  // Non-admin may only view tickets assigned to them
+  if (req.user && req.user.role !== 'admin' && row.assigned_to_id !== req.user.userId) {
     res.status(404).json({ error: 'Ticket not found' });
     return;
   }
@@ -306,10 +316,13 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
   const createdByEmail = ticketPayload?.created_by_email ?? undefined;
   const ticketTitle = row.title || row.id;
 
-  // Notify all admins and managers about the new ticket (except the creator)
+  // Notify users whose role is in the notify list (all role codes except customer and agent)
+  const { getRoleCodes } = await import('../lib/roleEnums');
+  const roleCodes = await getRoleCodes();
+  const notifyRoles = roleCodes.filter((r) => r !== 'customer' && r !== 'agent');
   const notifyUsers = await pool.query(
-    `SELECT id FROM users WHERE role::text IN ('admin', 'manager') AND status::text = 'active' AND id != $1`,
-    [createdById]
+    `SELECT id FROM users WHERE role = ANY($1) AND status::text = 'active' AND id != $2`,
+    [notifyRoles.length ? notifyRoles : ['admin', 'manager'], createdById]
   );
   for (const u of notifyUsers.rows) {
     createNotification(

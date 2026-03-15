@@ -71,12 +71,8 @@ export function MyOverdueTickets({ onViewTicket, onTrackTicket, currentUser }: M
     });
   }, [tickets]);
 
-  const accessibleTickets = useMemo(() => {
-    if (currentUser.role === 'admin') return overdueTickets;
-    if (currentUser.role === 'customer') return overdueTickets.filter((t) => t.createdBy === currentUser.name);
-    if (userZoneName) return overdueTickets.filter((t) => t.zone === userZoneName || t.assignedTo === currentUser.name);
-    return overdueTickets.filter((t) => t.assignedTo === currentUser.name);
-  }, [overdueTickets, currentUser, userZoneName]);
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const accessibleTickets = overdueTickets;
 
   const filteredTickets = useMemo(() => {
     return accessibleTickets.filter((ticket) => {

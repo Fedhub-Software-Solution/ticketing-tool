@@ -18,12 +18,9 @@ export function EscalatedTickets({ onViewTicket, currentUser }: EscalatedTickets
   const { tickets } = useTickets();
   const [searchQuery, setSearchQuery] = useState('');
 
-  const getEscalatedTickets = () => {
-    let escalated = tickets.filter(ticket => ticket.escalationLevel && ticket.escalationLevel > 0);
-    if (currentUser.role === 'manager') escalated = escalated.filter(ticket => ticket.zone === currentUser.zone);
-    else if (currentUser.role === 'agent') escalated = escalated.filter(ticket => ticket.assignedTo === currentUser.name);
-    return escalated;
-  };
+  // API returns only tickets assigned to current user for non-admin; filter by escalation level
+  const getEscalatedTickets = () =>
+    tickets.filter(ticket => ticket.escalationLevel && ticket.escalationLevel > 0);
 
   const filteredTickets = getEscalatedTickets().filter(t => 
     t.id.toLowerCase().includes(searchQuery.toLowerCase()) || 

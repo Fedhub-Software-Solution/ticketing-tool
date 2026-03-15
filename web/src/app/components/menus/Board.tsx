@@ -206,16 +206,8 @@ export function Board({ onViewTicket, onTrackTicket, onNavigate, currentUser }: 
 
   const { tickets, updateTicket, isLoading, isError, refetch } = useTickets(apiParams);
 
-  const accessibleTickets = useMemo(() => {
-    if (currentUser.role === 'admin') return tickets;
-    if (currentUser.role === 'customer') return tickets.filter(ticket => ticket.createdBy === currentUser.name);
-    if (currentUser.zone && zones.length) {
-      const zoneList = zones as { id: string; name: string }[];
-      const userZoneName = zoneList.find(z => z.id === currentUser.zone)?.name;
-      if (userZoneName) return tickets.filter(ticket => ticket.zone === userZoneName);
-    }
-    return tickets;
-  }, [tickets, currentUser, zones]);
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const accessibleTickets = tickets;
 
   const filteredTickets = useMemo(() => {
     return accessibleTickets.filter((ticket) => {

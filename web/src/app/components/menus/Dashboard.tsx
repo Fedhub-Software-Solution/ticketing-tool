@@ -48,14 +48,8 @@ export function Dashboard({ onNavigate, onViewTicket, currentUser }: DashboardPr
     currentUser.role === 'customer' ? { forUser: currentUser.id } : undefined;
   const { data: dashboard, isLoading: dashboardLoading } = useGetDashboardQuery(dashboardParams);
   const { data: tickets = [] } = useGetTicketsQuery({ limit: 10 });
-
-  const userTickets =
-    currentUser.role === 'customer'
-      ? (tickets as { createdBy?: string; id: string; title: string; updatedAt: string }[]).filter(
-          (t) => t.createdBy === currentUser.name
-        )
-      : (tickets as { id: string; title: string; updatedAt: string }[]);
-  const recentTickets = [...userTickets].sort(
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const recentTickets = [...(tickets as { id: string; title: string; updatedAt: string }[])].sort(
     (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
   ).slice(0, 5);
 

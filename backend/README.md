@@ -19,7 +19,7 @@ Node.js + Express REST API for the Ticketing Tool. Used by the React web app and
    psql -U postgres -d ticketing_tool -f sql/02_seed.sql
    psql -U postgres -d ticketing_tool -f sql/04_roles.sql
    ```
-   With Node: after `db:setup`, run `node scripts/run-sql.cjs sql/04_roles.sql` to create the roles table and seed system roles (for Access Management). For ticket attachments, run `node scripts/run-sql.cjs sql/04_ticket_attachments.sql`. For **notifications** (e.g. admin notified when a customer creates a ticket), run `node scripts/run-sql.cjs sql/06_notifications.sql`.
+   With Node: after `db:setup`, run `node scripts/run-sql.cjs sql/04_roles.sql` to create the roles table and seed default roles (admin, manager, agent, customer). Add or change roles in Access Management. **Existing DBs** that use the old `user_role` enum: run `node scripts/run-sql.cjs sql/13_roles_dynamic.sql` once to switch to dynamic roles (no reserved system roles). For ticket attachments, run `node scripts/run-sql.cjs sql/04_ticket_attachments.sql`. For **notifications** (e.g. admin notified when a customer creates a ticket), run `node scripts/run-sql.cjs sql/06_notifications.sql`.
 
 2. **Environment**: Copy `.env.example` to `.env` and set:
    - `DATABASE_URL` – PostgreSQL connection string, e.g. `postgresql://postgres:YOUR_PASSWORD@localhost:5432/ticketing_tool`  

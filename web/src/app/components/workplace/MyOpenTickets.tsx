@@ -70,12 +70,8 @@ export function MyOpenTickets({ onViewTicket, onTrackTicket, currentUser }: MyOp
     [currentUser.zone, zoneList]
   );
 
-  const accessibleTickets = useMemo(() => {
-    if (currentUser.role === 'admin') return tickets;
-    if (currentUser.role === 'customer') return tickets.filter((t) => t.createdBy === currentUser.name);
-    if (userZoneName) return tickets.filter((t) => t.zone === userZoneName || t.assignedTo === currentUser.name);
-    return tickets.filter((t) => t.assignedTo === currentUser.name);
-  }, [tickets, currentUser, userZoneName]);
+  // API returns only tickets assigned to current user for non-admin; all for admin
+  const accessibleTickets = tickets;
 
   const filteredTickets = useMemo(() => {
     return accessibleTickets.filter((ticket) => {

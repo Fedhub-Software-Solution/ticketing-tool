@@ -5,7 +5,7 @@ import type { User } from '@/app/types';
 import type { Role } from '@/app/store/apis/rolesApi';
 import type { Zone } from '@/app/store/apis/zonesApi';
 import type { Branch } from '@/app/store/apis/branchesApi';
-import { ROLE_COLORS } from '../../../common/constants';
+import { ROLE_COLORS, DEFAULT_ROLE_BADGE } from '../../../common/constants';
 
 type RoleLike = Pick<Role, 'id' | 'code' | 'name'>;
 type ZoneLike = Pick<Zone, 'id' | 'name'>;
@@ -67,7 +67,7 @@ export function getUserColumns(
         const label = roleDef?.name ?? row.original.role;
         return (
           <Badge
-            className={`${ROLE_COLORS[row.original.role as keyof typeof ROLE_COLORS] ?? 'bg-slate-100 text-slate-700 border-slate-200'} shadow-none border font-medium px-2 py-0 capitalize`}
+            className={`${ROLE_COLORS[row.original.role] ?? DEFAULT_ROLE_BADGE} shadow-none border font-medium px-2 py-0 capitalize`}
           >
             {label}
           </Badge>

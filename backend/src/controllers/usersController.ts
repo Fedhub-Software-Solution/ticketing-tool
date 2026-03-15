@@ -6,6 +6,7 @@ import { AuthRequest } from '../middleware';
 import { UserResponse } from '../types';
 import { sendVerificationWithPasswordEmail, sendProfileUpdatedEmail } from '../services/email';
 import { config } from '../config';
+import { getRoleCodes } from '../lib/roleEnums';
 
 const ALPHANUM = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
 
@@ -16,18 +17,16 @@ function generateRandomPassword(length = 12): string {
   return s;
 }
 
-const VALID_ROLES = ['admin', 'manager', 'agent', 'customer'] as const;
-
-/** Map role code from roles table to user_role enum (admin, manager, agent, customer). */
-function toEnumRole(code: string | undefined): (typeof VALID_ROLES)[number] {
-  if (!code) return 'agent';
+/** Resolve role code: must exist in roles table; optional alias mapping for backward compat. */
+async function toRoleCode(code: string | undefined): Promise<string> {
+  const validRoles = await getRoleCodes();
+  if (validRoles.length === 0) return (code || 'agent').toLowerCase().trim();
+  if (!code) return validRoles[0] ?? 'agent';
   const c = code.toLowerCase().trim();
-  if (VALID_ROLES.includes(c as any)) return c as (typeof VALID_ROLES)[number];
-  if (c === 'administrator' || c.startsWith('admin')) return 'admin';
-  if (c === 'mm' || c.startsWith('manager')) return 'manager';
-  if (c.startsWith('agent') || c.includes('support')) return 'agent';
-  if (c.startsWith('customer')) return 'customer';
-  return 'agent';
+  if (validRoles.includes(c)) return c;
+  const alias = c === 'administrator' || c.startsWith('admin') ? 'admin' : c === 'mm' || c.startsWith('manager') ? 'manager' : c.startsWith('agent') || c.includes('support') ? 'agent' : c.startsWith('customer') ? 'customer' : null;
+  if (alias && validRoles.includes(alias)) return alias;
+  return validRoles[0] ?? 'agent';
 }
 
 function toUserResponse(row: any): UserResponse {
@@ -77,7 +76,7 @@ export async function updateUser(req: AuthRequest, res: Response): Promise<void>
   }
   if (role !== undefined) {
     updates.push(`role = $${i++}`);
-    values.push(toEnumRole(role));
+    values.push(await toRoleCode(role));
   }
   if (zone !== undefined) {
     updates.push(`zone_id = $${i++}`);
@@ -149,7 +148,7 @@ export async function createUser(req: AuthRequest, res: Response): Promise<void>
   const plainPassword = providedPassword && String(providedPassword).trim().length >= 6
     ? String(providedPassword).trim()
     : generateRandomPassword(12);
-  const roleVal = toEnumRole(role);
+  const roleVal = await toRoleCode(role);
   const hash = await bcrypt.hash(plainPassword, 10);
   const emailNorm = email.trim().toLowerCase();
   const verificationToken = crypto.randomBytes(32).toString('hex');

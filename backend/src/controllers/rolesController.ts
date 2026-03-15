@@ -1,8 +1,7 @@
 import { Response } from 'express';
 import { pool } from '../db';
 import { AuthRequest } from '../middleware';
-
-const SYSTEM_ROLE_CODES = ['admin', 'manager', 'agent', 'customer'];
+import { invalidateRoleCodesCache } from '../lib/roleEnums';
 
 function toRole(row: any) {
   return {
@@ -12,22 +11,12 @@ function toRole(row: any) {
     description: row.description ?? '',
     permissions: row.permissions ?? [],
     userCount: parseInt(row.user_count, 10) || 0,
-    isSystem: SYSTEM_ROLE_CODES.includes(row.code),
   };
 }
 
-// Map role code to user_role enum so we count users correctly (users.role is enum, roles.code can be e.g. 'administrator', 'mm').
+// users.role stores role code (text); count users whose role matches this role's code
 const USER_COUNT_BY_ROLE = `
-  (SELECT COUNT(*)::int FROM users u
-   WHERE u.role = (
-     CASE
-       WHEN r.code IN ('admin', 'administrator') OR r.code LIKE 'admin%' THEN 'admin'::user_role
-       WHEN r.code IN ('manager', 'mm') OR r.code LIKE 'manager%' THEN 'manager'::user_role
-       WHEN r.code IN ('agent') OR r.code LIKE 'agent%' THEN 'agent'::user_role
-       WHEN r.code IN ('customer') OR r.code LIKE 'customer%' THEN 'customer'::user_role
-       ELSE NULL
-     END
-   )) AS user_count
+  (SELECT COUNT(*)::int FROM users u WHERE u.role = r.code) AS user_count
 `;
 
 export async function listRoles(_req: AuthRequest, res: Response): Promise<void> {
@@ -36,7 +25,7 @@ export async function listRoles(_req: AuthRequest, res: Response): Promise<void>
      FROM roles r
      ORDER BY r.name`
   );
-  res.json(r.rows.map(toRole));
+  res.json(r.rows.map((row) => toRole(row)));
 }
 
 export async function createRole(req: AuthRequest, res: Response): Promise<void> {
@@ -47,8 +36,9 @@ export async function createRole(req: AuthRequest, res: Response): Promise<void>
   }
   const slug = (code || name).toString().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const finalCode = slug || `role-${Date.now()}`;
-  if (SYSTEM_ROLE_CODES.includes(finalCode)) {
-    res.status(400).json({ message: 'This role code is reserved for a system role' });
+  const existing = await pool.query('SELECT id FROM roles WHERE code = $1', [finalCode]);
+  if (existing.rows.length > 0) {
+    res.status(400).json({ message: 'A role with this code already exists. Use a different name or code.' });
     return;
   }
   const r = await pool.query(
@@ -58,6 +48,7 @@ export async function createRole(req: AuthRequest, res: Response): Promise<void>
     [name, finalCode, description || null, permissions || []]
   );
   const row = r.rows[0];
+  invalidateRoleCodesCache();
   res.status(201).json(toRole({ ...row, user_count: 0, code: row.code }));
 }
 
@@ -92,15 +83,12 @@ export async function deleteRole(req: AuthRequest, res: Response): Promise<void>
     res.status(404).json({ message: 'Role not found' });
     return;
   }
-  if (SYSTEM_ROLE_CODES.includes(row.code)) {
-    res.status(400).json({ message: 'System roles cannot be deleted' });
-    return;
-  }
-  const count = await pool.query('SELECT COUNT(*)::int AS c FROM users u JOIN roles r ON u.role::text = r.code WHERE r.id = $1', [id]);
+  const count = await pool.query('SELECT COUNT(*)::int AS c FROM users u WHERE u.role = $1', [row.code]);
   if (parseInt(count.rows[0]?.c, 10) > 0) {
     res.status(400).json({ message: 'Cannot delete role that has users assigned' });
     return;
   }
   await pool.query('DELETE FROM roles WHERE id = $1', [id]);
+  invalidateRoleCodesCache();
   res.status(204).send();
 }
