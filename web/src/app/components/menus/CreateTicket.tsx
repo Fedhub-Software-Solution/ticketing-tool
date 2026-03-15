@@ -132,23 +132,13 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     () => (selectedSubCategory === 'none' ? '' : selectedSubCategory),
     [selectedSubCategory]
   );
-  /** Criticality dropdown: SLAs filtered by selected category and sub-category; selection sets ticket.priority + ticket.slaId */
+  /** Criticality dropdown: all SLAs (not filtered by category); selection sets ticket.priority + ticket.slaId */
   const criticalityOptions = useMemo(() => {
     const all = (slas as SLA[]).slice();
-    const categoryName = selectedCategoryName;
-    const subName = selectedSubCategoryName;
-    const list =
-      categoryName || subName
-        ? all.filter(
-            (s) =>
-              (s.category ?? '') === categoryName &&
-              (s.subCategory ?? '') === subName
-          )
-        : all;
     const order: Array<'low' | 'medium' | 'high' | 'urgent' | 'critical'> = ['critical', 'urgent', 'high', 'medium', 'low'];
-    list.sort((a, b) => order.indexOf(a.priority as any) - order.indexOf(b.priority as any));
-    return list;
-  }, [slas, selectedCategoryName, selectedSubCategoryName]);
+    all.sort((a, b) => order.indexOf(a.priority as any) - order.indexOf(b.priority as any));
+    return all;
+  }, [slas]);
   /** Status options from ticket_statuses table (for Current Status dropdown) */
   const statusOptions = useMemo(() => (ticketStatuses as TicketStatus[]).slice(), [ticketStatuses]);
   /** Only zones that have at least one branch (required for mandatory branch selection). */
@@ -166,8 +156,16 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
     () => branchesForZone.find((b) => b.name === selectedBranch)?.code ?? '',
     [branchesForZone, selectedBranch]
   );
-  /** All users for Assigned Professional dropdown (show full list) */
-  const usersForAssignment = useMemo(() => users, [users]);
+  const selectedBranchId = useMemo(
+    () => branchesForZone.find((b) => b.name === selectedBranch)?.id ?? null,
+    [branchesForZone, selectedBranch]
+  );
+  /** Assigned Professional: Auto-assign Engine + users in the selected Zone and Branch */
+  const usersForAssignment = useMemo(() => {
+    const list = users as User[];
+    if (!selectedZoneId || !selectedBranchId) return list;
+    return list.filter((u) => u.zone === selectedZoneId && u.branch === selectedBranchId);
+  }, [users, selectedZoneId, selectedBranchId]);
 
   const displayComments = useMemo((): Comment[] => {
     if (effectiveTicketId && apiComments.length >= 0) {
@@ -198,8 +196,15 @@ export function CreateTicket({ currentUser, onBack, onSuccess, ticketId, ticket:
 
   useEffect(() => {
     const branchNames = branchesForZone.map((b) => b.name);
-    if (selectedBranch && !branchNames.includes(selectedBranch)) setSelectedBranch(branchNames[0] ?? '');
+    if (branchNames.length > 0 && selectedBranch && !branchNames.includes(selectedBranch)) setSelectedBranch(branchNames[0] ?? '');
   }, [zoneValue, branchesForZone, selectedBranch]);
+
+  // When zone/branch or user list changes: if current assignee is not in filtered list, reset to Auto-assign Engine
+  useEffect(() => {
+    if (assignedToValue === 'unassigned') return;
+    const inList = usersForAssignment.some((u: User) => u.name === assignedToValue);
+    if (!inList && usersForAssignment.length >= 0) setAssignedToValue('unassigned');
+  }, [usersForAssignment, assignedToValue]);
 
   // When category/sub or SLAs change: if current criticality is not in filtered list, select first available
   useEffect(() => {

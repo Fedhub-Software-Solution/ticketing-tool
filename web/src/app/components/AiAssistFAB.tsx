@@ -117,23 +117,13 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
     const zoneId = zoneList.find((z) => z.name === zoneName)?.id;
     return (branches as { id: string; name: string; zoneId: string; code?: string }[]).filter((b) => b.zoneId === zoneId);
   }, [branches, zoneList, zoneName]);
-  /** Category and sub names for SLA filtering. */
-  const categoryNameForSla = useMemo(
-    () => parentCategories.find((c) => c.id === categoryId)?.name ?? '',
-    [parentCategories, categoryId]
-  );
-  const subCategoryNameForSla = useMemo(
-    () => (subCategory === 'none' ? '' : subCategory),
-    [subCategory]
-  );
-  /** Criticality options: SLAs filtered by selected category and sub-category. */
+  /** Criticality options: all SLAs (not filtered by category), sorted by priority. */
   const criticalityOptions = useMemo(() => {
-    const all = slas as { id: string; name: string; priority: string; category?: string; subCategory?: string }[];
-    const cat = categoryNameForSla;
-    const sub = subCategoryNameForSla;
-    if (!cat && !sub) return all;
-    return all.filter((s) => (s.category ?? '') === cat && (s.subCategory ?? '') === sub);
-  }, [slas, categoryNameForSla, subCategoryNameForSla]);
+    const all = (slas as { id: string; name: string; priority: string }[]).slice();
+    const order: Array<'low' | 'medium' | 'high' | 'urgent' | 'critical'> = ['critical', 'urgent', 'high', 'medium', 'low'];
+    all.sort((a, b) => order.indexOf(a.priority as any) - order.indexOf(b.priority as any));
+    return all;
+  }, [slas]);
   const selectedSla = useMemo(
     () => (slas as { id: string; name: string; priority: string }[]).find((s) => s.id === selectedSlaId),
     [slas, selectedSlaId]
@@ -142,7 +132,18 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
     () => branchesForZone.find((b) => b.name === branchName)?.code ?? '',
     [branchesForZone, branchName]
   );
+  const selectedZoneId = useMemo(() => zoneList.find((z) => z.name === zoneName)?.id ?? null, [zoneList, zoneName]);
+  const selectedBranchId = useMemo(
+    () => branchesForZone.find((b) => b.name === branchName)?.id ?? null,
+    [branchesForZone, branchName]
+  );
   const userList = useMemo(() => (users as { id: string; name: string }[]) || [], [users]);
+  /** Assignee options: Auto-assign Engine + users in the selected zone and branch. */
+  const usersForAssignee = useMemo(() => {
+    const list = users as User[];
+    if (!selectedZoneId || !selectedBranchId) return list;
+    return list.filter((u) => u.zone === selectedZoneId && u.branch === selectedBranchId);
+  }, [users, selectedZoneId, selectedBranchId]);
 
   const currentStep = STEP_ORDER[currentStepIndex];
 
@@ -159,10 +160,16 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
     if (!inList) setSelectedSlaId(criticalityOptions[0].id);
   }, [criticalityOptions, selectedSlaId]);
 
-  /** When transitioning from zone→branch or category→subCategory, pass overrides so options use the just-selected value (state may not have updated yet). */
+  useEffect(() => {
+    if (assignedToId === 'unassigned') return;
+    const inList = usersForAssignee.some((u) => u.id === assignedToId);
+    if (!inList) setAssignedToId('unassigned');
+  }, [usersForAssignee, assignedToId]);
+
+  /** When transitioning from zone→branch or category→subCategory or branch→assignee, pass overrides so options use the just-selected value (state may not have updated yet). */
   const getNextBotMessage = (
     step: StepId,
-    overrides?: { selectedZone?: string; selectedCategoryId?: string }
+    overrides?: { selectedZone?: string; selectedBranch?: string; selectedCategoryId?: string }
   ): ChatMessage => {
     switch (step) {
       case 'choice':
@@ -247,15 +254,29 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
           options: [{ label: 'No specific branch', value: '_none' }, ...branchesInZone.map((b) => ({ label: b.name, value: b.name }))],
         };
       }
-      case 'assignee':
+      case 'assignee': {
+        const zoneForAssignee = overrides?.selectedZone ?? zoneName;
+        const branchForAssignee = overrides?.selectedBranch ?? branchName;
+        const zId = zoneList.find((z) => z.name === zoneForAssignee)?.id ?? null;
+        const branchesInZoneForAssignee = zId
+          ? (branches as { id: string; name: string; zoneId: string }[]).filter((b) => b.zoneId === zId)
+          : [];
+        const bId = branchForAssignee && branchForAssignee !== '_none'
+          ? branchesInZoneForAssignee.find((b) => b.name === branchForAssignee)?.id ?? null
+          : null;
+        const assigneeList =
+          zId && bId
+            ? (users as User[]).filter((u) => u.zone === zId && u.branch === bId)
+            : usersForAssignee;
         return {
           role: 'bot',
           content: "Who should this be assigned to?",
           options: [
             { label: 'Auto-assign Engine', value: 'unassigned' },
-            ...userList.map((u) => ({ label: u.name, value: u.id })),
+            ...assigneeList.map((u) => ({ label: u.name, value: u.id })),
           ],
         };
+      }
       case 'documentUpload':
         return {
           role: 'bot',
@@ -289,10 +310,10 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
         if (value === 'self') {
           setCreateForSelf(true);
           setRequesterId(null);
-          return 3;
+          return STEP_ORDER.indexOf('describe');
         }
         setCreateForSelf(false);
-        return 2;
+        return STEP_ORDER.indexOf('requesterUser');
       case 'requesterUser':
         setRequesterId(value);
         return 4;
@@ -473,6 +494,8 @@ export function AiAssistFAB({ currentUser, onTicketCreated, hidden }: AiAssistFA
       setMessages((prev) => [...prev, { role: 'bot', content: 'Add your file(s) below, then click Continue.' }]);
     } else if (currentStep === 'zone' && nextStep === 'branch') {
       setMessages((prev) => [...prev, getNextBotMessage('branch', { selectedZone: value })]);
+    } else if (currentStep === 'branch' && nextStep === 'assignee') {
+      setMessages((prev) => [...prev, getNextBotMessage('assignee', { selectedZone: zoneName, selectedBranch: value })]);
     } else if (currentStep === 'category' && nextStep === 'subCategory') {
       setMessages((prev) => [...prev, getNextBotMessage('subCategory', { selectedCategoryId: value })]);
     } else {

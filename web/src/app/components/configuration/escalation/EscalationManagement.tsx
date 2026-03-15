@@ -38,14 +38,14 @@ import {
 } from '@/app/components/common/ui/alert-dialog';
 import { MaterialReactTableWrapper } from '@/app/components/common/mrt/MaterialReactTableWrapper';
 import { MaterialReactTableCardListWrapper } from '@/app/components/common/mrt/MaterialReactTableCardListWrapper';
-import { SLA_PRIORITIES } from '@/app/components/common/constants';
-import type { SLAPriorityValue } from '@/app/components/common/constants';
 import {
   useGetEscalationRulesQuery,
   useCreateEscalationRuleMutation,
   useUpdateEscalationRuleMutation,
   useDeleteEscalationRuleMutation,
 } from '@/app/store/apis/escalationRulesApi';
+import { useGetSLAsQuery } from '@/app/store/apis/slasApi';
+import { useGetRolesQuery } from '@/app/store/apis/rolesApi';
 import type { EscalationRule } from '@/app/types';
 import { toast } from 'sonner';
 import { getEscalationTableColumns } from './escalationTableColumns';
@@ -57,8 +57,9 @@ const EMPTY_MESSAGE =
 
 const INITIAL_FORM = {
   name: '',
-  priority: 'medium' as EscalationRule['priority'],
-  triggerAfter: 60,
+  slaId: '' as string | null,
+  level1EscalatePercent: 50,
+  level2EscalatePercent: 75,
   level1Escalate: '',
   level2Escalate: '',
   notifyUsers: '',
@@ -70,13 +71,19 @@ type FormData = typeof INITIAL_FORM;
 export function EscalationManagement() {
   const { data: rules = [], isLoading: rulesLoading } =
     useGetEscalationRulesQuery();
+  const { data: slas = [] } = useGetSLAsQuery();
+  const { data: allRoles = [] } = useGetRolesQuery();
+  const rolesForEscalation = useMemo(
+    () => allRoles.filter((r) => r.code !== 'agent' && r.code !== 'customer'),
+    [allRoles]
+  );
   const [createRule] = useCreateEscalationRuleMutation();
   const [updateRule] = useUpdateEscalationRuleMutation();
   const [deleteRule] = useDeleteEscalationRuleMutation();
 
   const [viewMode, setViewMode] = useState<'list' | 'table'>('list');
   const [searchQuery, setSearchQuery] = useState('');
-  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [slaFilter, setSlaFilter] = useState<string>('all');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<EscalationRule | null>(null);
   const [ruleToDelete, setRuleToDelete] = useState<EscalationRule | null>(null);
@@ -87,13 +94,13 @@ export function EscalationManagement() {
       rules.filter((rule) => {
         const matchesSearch =
           rule.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          rule.level1Escalate.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          rule.level2Escalate.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesPriority =
-          priorityFilter === 'all' || rule.priority === priorityFilter;
-        return matchesSearch && matchesPriority;
+          (rule.level1Escalate ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (rule.level2Escalate ?? '').toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesSla =
+          slaFilter === 'all' || (rule.slaId ?? '') === slaFilter;
+        return matchesSearch && matchesSla;
       }),
-    [rules, searchQuery, priorityFilter]
+    [rules, searchQuery, slaFilter]
   );
 
   const escalationColumns = useMemo(() => getEscalationTableColumns(), []);
@@ -107,10 +114,11 @@ export function EscalationManagement() {
     setEditingRule(rule);
     setFormData({
       name: rule.name,
-      priority: rule.priority,
-      triggerAfter: rule.triggerAfter,
-      level1Escalate: rule.level1Escalate,
-      level2Escalate: rule.level2Escalate,
+      slaId: rule.slaId ?? '',
+      level1EscalatePercent: rule.level1EscalatePercent ?? 50,
+      level2EscalatePercent: rule.level2EscalatePercent ?? 75,
+      level1Escalate: rule.level1Escalate ?? '',
+      level2Escalate: rule.level2Escalate ?? '',
       notifyUsers: rule.notifyUsers?.join(', ') ?? '',
       autoEscalate: rule.autoEscalate,
     });
@@ -121,8 +129,9 @@ export function EscalationManagement() {
     try {
       await createRule({
         name: formData.name,
-        priority: formData.priority,
-        triggerAfter: formData.triggerAfter,
+        slaId: formData.slaId || null,
+        level1EscalatePercent: formData.level1EscalatePercent,
+        level2EscalatePercent: formData.level2EscalatePercent,
         level1Escalate: formData.level1Escalate,
         level2Escalate: formData.level2Escalate,
         notifyUsers: formData.notifyUsers
@@ -145,11 +154,17 @@ export function EscalationManagement() {
       await updateRule({
         id: editingRule.id,
         body: {
-          ...formData,
+          name: formData.name,
+          slaId: formData.slaId || null,
+          level1EscalatePercent: formData.level1EscalatePercent,
+          level2EscalatePercent: formData.level2EscalatePercent,
+          level1Escalate: formData.level1Escalate,
+          level2Escalate: formData.level2Escalate,
           notifyUsers: formData.notifyUsers
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean),
+          autoEscalate: formData.autoEscalate,
         },
       }).unwrap();
       setEditingRule(null);
@@ -190,15 +205,15 @@ export function EscalationManagement() {
               </div>
               <div className="flex items-center gap-2">
                 <Filter className="w-4 h-4 text-slate-400" />
-                <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                  <SelectTrigger className="w-[160px] bg-slate-50 border-slate-200 h-10">
-                    <SelectValue placeholder="All Priorities" />
+                <Select value={slaFilter} onValueChange={setSlaFilter}>
+                  <SelectTrigger className="w-[200px] bg-slate-50 border-slate-200 h-10">
+                    <SelectValue placeholder="All SLAs" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Priorities</SelectItem>
-                    {SLA_PRIORITIES.map((p) => (
-                      <SelectItem key={p.value} value={p.value}>
-                        {p.label}
+                    <SelectItem value="all">All SLAs</SelectItem>
+                    {slas.map((sla) => (
+                      <SelectItem key={sla.id} value={sla.id}>
+                        {sla.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -282,73 +297,107 @@ export function EscalationManagement() {
                         className="bg-white"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label htmlFor="esc-priority">Trigger Priority</Label>
+                    <div className="space-y-2">
+                      <Label htmlFor="esc-sla">SLA Name</Label>
+                      <Select
+                        value={formData.slaId ?? ''}
+                        onValueChange={(value) =>
+                          setFormData({ ...formData, slaId: value || null })
+                        }
+                      >
+                        <SelectTrigger className="bg-white" id="esc-sla">
+                          <SelectValue placeholder="Select SLA" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {slas.map((sla) => (
+                            <SelectItem key={sla.id} value={sla.id}>
+                              {sla.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label htmlFor="esc-level1">Level 1 Escalate</Label>
+                        <span className="text-xs text-slate-500">({formData.level1EscalatePercent}% time of SLA Config)</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
                         <Select
-                          value={formData.priority}
-                          onValueChange={(value: SLAPriorityValue) =>
-                            setFormData({ ...formData, priority: value })
+                          value={formData.level1Escalate || ''}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, level1Escalate: value })
                           }
                         >
-                          <SelectTrigger className="bg-white">
-                            <SelectValue />
+                          <SelectTrigger id="esc-level1" className="bg-white flex-1">
+                            <SelectValue placeholder="Select role" />
                           </SelectTrigger>
                           <SelectContent>
-                            {SLA_PRIORITIES.map((p) => (
-                              <SelectItem key={p.value} value={p.value}>
-                                {p.label}
+                            {rolesForEscalation.map((role) => (
+                              <SelectItem key={role.id} value={role.code}>
+                                {role.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="esc-trigger">Trigger After (min)</Label>
                         <Input
-                          id="esc-trigger"
                           type="number"
-                          value={formData.triggerAfter || 0}
+                          min={0}
+                          max={100}
+                          value={formData.level1EscalatePercent}
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10);
                             setFormData({
                               ...formData,
-                              triggerAfter: Number.isNaN(val) ? 0 : val,
+                              level1EscalatePercent: Number.isNaN(val) ? 50 : Math.min(100, Math.max(0, val)),
                             });
                           }}
-                          className="bg-white"
+                          className="bg-white w-16 shrink-0"
+                          title="% of SLA time"
                         />
+                        <span className="text-xs text-slate-500 shrink-0">%</span>
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="esc-level1">Level 1 Escalate</Label>
-                      <Input
-                        id="esc-level1"
-                        value={formData.level1Escalate}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            level1Escalate: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., Senior Agent / Team Lead"
-                        className="bg-white"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="esc-level2">Level 2 Escalate</Label>
-                      <Input
-                        id="esc-level2"
-                        value={formData.level2Escalate}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            level2Escalate: e.target.value,
-                          })
-                        }
-                        placeholder="e.g., Department Manager"
-                        className="bg-white"
-                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Label htmlFor="esc-level2">Level 2 Escalate</Label>
+                        <span className="text-xs text-slate-500">({formData.level2EscalatePercent}% time of SLA Config)</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Select
+                          value={formData.level2Escalate || ''}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, level2Escalate: value })
+                          }
+                        >
+                          <SelectTrigger id="esc-level2" className="bg-white flex-1">
+                            <SelectValue placeholder="Select role" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {rolesForEscalation.map((role) => (
+                              <SelectItem key={role.id} value={role.code}>
+                                {role.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={formData.level2EscalatePercent}
+                          onChange={(e) => {
+                            const val = parseInt(e.target.value, 10);
+                            setFormData({
+                              ...formData,
+                              level2EscalatePercent: Number.isNaN(val) ? 75 : Math.min(100, Math.max(0, val)),
+                            });
+                          }}
+                          className="bg-white w-16 shrink-0"
+                          title="% of SLA time"
+                        />
+                        <span className="text-xs text-slate-500 shrink-0">%</span>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="esc-notify">Notify Emails</Label>

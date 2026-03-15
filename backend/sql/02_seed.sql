@@ -47,14 +47,17 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM slas LIMIT 1);
 
 -- =============================================================================
--- Escalation rules
+-- Escalation rules (sla_id from slas table; run after SLAs seed)
 -- =============================================================================
-INSERT INTO escalation_rules (name, priority, trigger_after_mins, level1_escalate, level2_escalate, notify_users, auto_escalate)
-VALUES
-  ('Urgent Ticket Escalation', 'urgent'::priority_level, 30, 'Technical Lead', 'Senior Support Manager', ARRAY['manager@company.com', 'director@company.com'], true),
-  ('High Priority Escalation', 'high'::priority_level, 120, 'Senior Agent', 'Team Lead', ARRAY['teamlead@company.com'], true),
-  ('Medium Priority Escalation', 'medium'::priority_level, 480, 'Senior Agent', 'Team Lead', ARRAY['teamlead@company.com'], false),
-  ('Low Priority Escalation', 'low'::priority_level, 1440, 'Senior Agent', 'Team Lead', ARRAY['teamlead@company.com'], false);
+-- level1_escalate / level2_escalate store role codes from roles table (e.g. manager, admin; exclude agent, customer)
+INSERT INTO escalation_rules (name, sla_id, level1_escalate_percent, level2_escalate_percent, level1_escalate, level2_escalate, notify_users, auto_escalate)
+SELECT 'Urgent Ticket Escalation', s.id, 50, 75, 'manager', 'admin', ARRAY['manager@company.com', 'director@company.com'], true FROM slas s WHERE s.priority = 'urgent'::priority_level AND NOT EXISTS (SELECT 1 FROM escalation_rules WHERE name = 'Urgent Ticket Escalation') LIMIT 1;
+INSERT INTO escalation_rules (name, sla_id, level1_escalate_percent, level2_escalate_percent, level1_escalate, level2_escalate, notify_users, auto_escalate)
+SELECT 'High Priority Escalation', s.id, 50, 75, 'manager', 'admin', ARRAY['teamlead@company.com'], true FROM slas s WHERE s.priority = 'high'::priority_level AND NOT EXISTS (SELECT 1 FROM escalation_rules WHERE name = 'High Priority Escalation') LIMIT 1;
+INSERT INTO escalation_rules (name, sla_id, level1_escalate_percent, level2_escalate_percent, level1_escalate, level2_escalate, notify_users, auto_escalate)
+SELECT 'Medium Priority Escalation', s.id, 50, 75, 'manager', 'admin', ARRAY['teamlead@company.com'], false FROM slas s WHERE s.priority = 'medium'::priority_level AND NOT EXISTS (SELECT 1 FROM escalation_rules WHERE name = 'Medium Priority Escalation') LIMIT 1;
+INSERT INTO escalation_rules (name, sla_id, level1_escalate_percent, level2_escalate_percent, level1_escalate, level2_escalate, notify_users, auto_escalate)
+SELECT 'Low Priority Escalation', s.id, 50, 75, 'manager', 'admin', ARRAY['teamlead@company.com'], false FROM slas s WHERE s.priority = 'low'::priority_level AND NOT EXISTS (SELECT 1 FROM escalation_rules WHERE name = 'Low Priority Escalation') LIMIT 1;
 
 -- =============================================================================
 -- Categories (sample; parent_id can be set for subcategories)

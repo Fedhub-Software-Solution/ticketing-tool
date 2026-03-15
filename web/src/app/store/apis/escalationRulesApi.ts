@@ -12,7 +12,7 @@ export const escalationRulesApi = baseApi.injectEndpoints({
     }),
     createEscalationRule: build.mutation<
       EscalationRule,
-      { name: string; priority: string; triggerAfter: number; level1Escalate?: string; level2Escalate?: string; notifyUsers?: string[]; autoEscalate?: boolean }
+      { name: string; slaId: string | null; level1EscalatePercent?: number; level2EscalatePercent?: number; level1Escalate?: string; level2Escalate?: string; notifyUsers?: string[]; autoEscalate?: boolean }
     >({
       query: (body) => ({ url: 'escalation-rules', method: 'POST', body }),
       invalidatesTags: [{ type: 'EscalationRules', id: 'LIST' }],

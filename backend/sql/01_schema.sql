@@ -87,8 +87,9 @@ CREATE INDEX idx_slas_priority ON slas (priority);
 CREATE TABLE escalation_rules (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name              VARCHAR(255) NOT NULL,
-  priority          priority_level NOT NULL,
-  trigger_after_mins INTEGER NOT NULL CHECK (trigger_after_mins >= 0),
+  sla_id            UUID REFERENCES slas (id) ON DELETE SET NULL,
+  level1_escalate_percent  INTEGER NOT NULL DEFAULT 50 CHECK (level1_escalate_percent >= 0 AND level1_escalate_percent <= 100),
+  level2_escalate_percent  INTEGER NOT NULL DEFAULT 75 CHECK (level2_escalate_percent >= 0 AND level2_escalate_percent <= 100),
   level1_escalate   VARCHAR(255),
   level2_escalate   VARCHAR(255),
   notify_users      TEXT[] DEFAULT '{}',
@@ -97,7 +98,7 @@ CREATE TABLE escalation_rules (
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_escalation_rules_priority ON escalation_rules (priority);
+CREATE INDEX idx_escalation_rules_sla_id ON escalation_rules (sla_id);
 
 -- =============================================================================
 -- Categories (hierarchical: parent_id for subcategories)

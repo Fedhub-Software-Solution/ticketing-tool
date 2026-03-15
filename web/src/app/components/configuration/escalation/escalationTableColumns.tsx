@@ -1,10 +1,7 @@
 import { TrendingUp, Users } from 'lucide-react';
 import type { MRT_ColumnDef } from 'material-react-table';
 import { Badge } from '@/app/components/common/ui/badge';
-import { SLA_PRIORITY_COLORS } from '@/app/components/common/constants';
-import type { SLAPriorityValue } from '@/app/components/common/constants';
 import type { EscalationRule } from '@/app/types';
-import { formatTime, priorityLabel } from '@/app/components/common/utils';
 
 export function getEscalationTableColumns(): MRT_ColumnDef<EscalationRule>[] {
   return [
@@ -21,22 +18,20 @@ export function getEscalationTableColumns(): MRT_ColumnDef<EscalationRule>[] {
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-slate-900">{row.original.name}</span>
             <span className="text-[10px] text-slate-400 font-mono">
-              After {formatTime(row.original.triggerAfter)}
+              L1: {row.original.level1EscalatePercent}% · L2: {row.original.level2EscalatePercent}% of SLA
             </span>
           </div>
         </div>
       ),
     },
     {
-      accessorKey: 'priority',
-      header: 'Priority',
-      size: 120,
+      accessorKey: 'slaName',
+      header: 'SLA Name',
+      size: 180,
       muiTableHeadCellProps: { sx: { fontWeight: 700, color: '#0f172a' } },
       Cell: ({ row }) => (
-        <Badge
-          className={`${SLA_PRIORITY_COLORS[row.original.priority as SLAPriorityValue] ?? 'bg-slate-100 text-slate-700 border-slate-200'} border font-medium px-2 py-0`}
-        >
-          {priorityLabel(row.original.priority)}
+        <Badge className="bg-slate-100 text-slate-700 border-slate-200 border font-medium px-2 py-0">
+          {row.original.slaName ?? '—'}
         </Badge>
       ),
     },
@@ -48,7 +43,7 @@ export function getEscalationTableColumns(): MRT_ColumnDef<EscalationRule>[] {
       Cell: ({ row }) => (
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
           <Users className="w-3 h-3" />
-          {row.original.level1Escalate || '—'}
+          {row.original.level1EscalateRoleName ?? row.original.level1Escalate ?? '—'}
         </div>
       ),
     },
@@ -60,7 +55,7 @@ export function getEscalationTableColumns(): MRT_ColumnDef<EscalationRule>[] {
       Cell: ({ row }) => (
         <div className="flex items-center gap-2 text-sm font-bold text-orange-600">
           <TrendingUp className="w-3 h-3" />
-          {row.original.level2Escalate || '—'}
+          {row.original.level2EscalateRoleName ?? row.original.level2Escalate ?? '—'}
         </div>
       ),
     },

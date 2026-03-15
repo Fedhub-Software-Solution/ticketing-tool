@@ -45,10 +45,14 @@ export interface TicketStatus {
 export interface EscalationRule {
   id: string;
   name: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  triggerAfter: number; // in minutes
-  level1Escalate: string;
-  level2Escalate: string;
+  slaId: string | null;
+  slaName: string | null;
+  level1EscalatePercent: number; // 50 = 50% of SLA Config time
+  level2EscalatePercent: number; // 75 = 75% of SLA Config time
+  level1Escalate: string; // role code from roles table
+  level2Escalate: string; // role code from roles table
+  level1EscalateRoleName?: string | null; // resolved role name for display
+  level2EscalateRoleName?: string | null; // resolved role name for display
   notifyUsers: string[];
   autoEscalate: boolean;
 }

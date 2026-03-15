@@ -42,8 +42,9 @@ export interface SLARow {
 export interface EscalationRuleRow {
   id: string;
   name: string;
-  priority: TicketPriority;
-  trigger_after_mins: number;
+  sla_id: string | null;
+  level1_escalate_percent: number;
+  level2_escalate_percent: number;
   level1_escalate: string;
   level2_escalate: string;
   notify_users: string[];

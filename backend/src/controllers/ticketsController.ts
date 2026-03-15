@@ -265,6 +265,16 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
     return;
   }
 
+  // Auto-assign: when no assignee provided, assign to a random agent in the selected branch
+  let effectiveAssignedToId = assignedToId;
+  if (!effectiveAssignedToId && branchId) {
+    const agentRow = await pool.query(
+      `SELECT id FROM users WHERE role = $1 AND branch_id = $2 AND status::text = 'active' ORDER BY RANDOM() LIMIT 1`,
+      ['agent', branchId]
+    );
+    if (agentRow.rows[0]) effectiveAssignedToId = agentRow.rows[0].id;
+  }
+
   const nextNum = await pool.query("SELECT nextval('ticket_number_seq') AS n");
   const n = nextNum.rows[0]?.n ?? 1;
   const ticketNumber = 'TKT-' + String(n).padStart(3, '0');
@@ -284,7 +294,7 @@ export async function createTicket(req: AuthRequest, res: Response): Promise<voi
       location || null,
       branchId,
       branchCode || null,
-      uuidOrNull(assignedToId),
+      uuidOrNull(effectiveAssignedToId),
       createdById,
       uuidOrNull(slaId),
       slaDueDate || null,
